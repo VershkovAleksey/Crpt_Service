@@ -1,0 +1,12 @@
+B:\source\Crpt\Database\bin\Debug\net8.0\Database.deps.json
+B:\source\Crpt\Database\bin\Debug\net8.0\Database.dll
+B:\source\Crpt\Database\bin\Debug\net8.0\Database.pdb
+B:\source\Crpt\Database\obj\Debug\net8.0\Database.GeneratedMSBuildEditorConfig.editorconfig
+B:\source\Crpt\Database\obj\Debug\net8.0\Database.AssemblyInfoInputs.cache
+B:\source\Crpt\Database\obj\Debug\net8.0\Database.AssemblyInfo.cs
+B:\source\Crpt\Database\obj\Debug\net8.0\Database.csproj.CoreCompileInputs.cache
+B:\source\Crpt\Database\obj\Debug\net8.0\Database.sourcelink.json
+B:\source\Crpt\Database\obj\Debug\net8.0\Database.dll
+B:\source\Crpt\Database\obj\Debug\net8.0\refint\Database.dll
+B:\source\Crpt\Database\obj\Debug\net8.0\Database.pdb
+B:\source\Crpt\Database\obj\Debug\net8.0\ref\Database.dll

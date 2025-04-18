@@ -1,0 +1,12 @@
+B:\source\Crpt\Abstractions\bin\Debug\net8.0\Abstractions.deps.json
+B:\source\Crpt\Abstractions\bin\Debug\net8.0\Abstractions.dll
+B:\source\Crpt\Abstractions\bin\Debug\net8.0\Abstractions.pdb
+B:\source\Crpt\Abstractions\obj\Debug\net8.0\Abstractions.GeneratedMSBuildEditorConfig.editorconfig
+B:\source\Crpt\Abstractions\obj\Debug\net8.0\Abstractions.AssemblyInfoInputs.cache
+B:\source\Crpt\Abstractions\obj\Debug\net8.0\Abstractions.AssemblyInfo.cs
+B:\source\Crpt\Abstractions\obj\Debug\net8.0\Abstractions.csproj.CoreCompileInputs.cache
+B:\source\Crpt\Abstractions\obj\Debug\net8.0\Abstractions.sourcelink.json
+B:\source\Crpt\Abstractions\obj\Debug\net8.0\Abstractions.dll
+B:\source\Crpt\Abstractions\obj\Debug\net8.0\refint\Abstractions.dll
+B:\source\Crpt\Abstractions\obj\Debug\net8.0\Abstractions.pdb
+B:\source\Crpt\Abstractions\obj\Debug\net8.0\ref\Abstractions.dll
