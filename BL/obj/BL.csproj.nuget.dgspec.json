@@ -20,12 +20,17 @@
           "net8.0"
         ],
         "sources": {
+          "B:\\source\\local": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net8.0": {
             "targetAlias": "net8.0",
-            "projectReferences": {}
+            "projectReferences": {
+              "B:\\source\\Crpt\\Domain\\Domain.csproj": {
+                "projectPath": "B:\\source\\Crpt\\Domain\\Domain.csproj"
+              }
+            }
           }
         },
         "warningProperties": {
@@ -42,6 +47,16 @@
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
+          "dependencies": {
+            "Microsoft.Extensions.Http": {
+              "target": "Package",
+              "version": "[8.0.1, )"
+            },
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[13.0.3, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",
@@ -78,6 +93,7 @@
           "net8.0"
         ],
         "sources": {
+          "B:\\source\\local": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -110,6 +126,32 @@
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
+          "dependencies": {
+            "CryptoPro.Net.Security": {
+              "target": "Package",
+              "version": "[2024.11.19, )"
+            },
+            "CryptoPro.Security.Cryptography": {
+              "target": "Package",
+              "version": "[2024.11.19, )"
+            },
+            "CryptoPro.Security.Cryptography.Pkcs": {
+              "target": "Package",
+              "version": "[2024.11.19, )"
+            },
+            "CryptoPro.Security.Cryptography.Xml": {
+              "target": "Package",
+              "version": "[2024.11.19, )"
+            },
+            "Microsoft.Extensions.Http": {
+              "target": "Package",
+              "version": "[8.0.1, )"
+            },
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[13.0.3, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",
@@ -146,6 +188,7 @@
           "net8.0"
         ],
         "sources": {
+          "B:\\source\\local": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -220,6 +263,7 @@
           "net8.0"
         ],
         "sources": {
+          "B:\\source\\local": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -242,6 +286,38 @@
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
+          "dependencies": {
+            "Microsoft.EntityFrameworkCore": {
+              "target": "Package",
+              "version": "[8.0.15, )"
+            },
+            "Microsoft.EntityFrameworkCore.Abstractions": {
+              "target": "Package",
+              "version": "[8.0.15, )"
+            },
+            "Microsoft.EntityFrameworkCore.Analyzers": {
+              "target": "Package",
+              "version": "[8.0.15, )"
+            },
+            "Microsoft.EntityFrameworkCore.Relational": {
+              "target": "Package",
+              "version": "[8.0.15, )"
+            },
+            "Microsoft.EntityFrameworkCore.Tools": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[8.0.15, )"
+            },
+            "Npgsql": {
+              "target": "Package",
+              "version": "[8.0.4, )"
+            },
+            "Npgsql.EntityFrameworkCore.PostgreSQL": {
+              "target": "Package",
+              "version": "[8.0.4, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",
@@ -278,6 +354,7 @@
           "net8.0"
         ],
         "sources": {
+          "B:\\source\\local": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -300,6 +377,12 @@
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
+          "dependencies": {
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[13.0.3, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",

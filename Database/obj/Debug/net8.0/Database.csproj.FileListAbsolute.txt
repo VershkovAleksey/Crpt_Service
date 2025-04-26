@@ -10,3 +10,6 @@ B:\source\Crpt\Database\obj\Debug\net8.0\Database.dll
 B:\source\Crpt\Database\obj\Debug\net8.0\refint\Database.dll
 B:\source\Crpt\Database\obj\Debug\net8.0\Database.pdb
 B:\source\Crpt\Database\obj\Debug\net8.0\ref\Database.dll
+B:\source\Crpt\Database\bin\Debug\net8.0\Database.runtimeconfig.json
+B:\source\Crpt\Database\obj\Debug\net8.0\Database.csproj.AssemblyReference.cache
+B:\source\Crpt\Database\obj\Debug\net8.0\Database.genruntimeconfig.cache

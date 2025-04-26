@@ -20,6 +20,7 @@
           "net8.0"
         ],
         "sources": {
+          "B:\\source\\local": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -42,6 +43,12 @@
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
+          "dependencies": {
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[13.0.3, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",
