@@ -1,3 +1,5 @@
+using System;
+
 namespace Database.Entities;
 
 public class EntityBase

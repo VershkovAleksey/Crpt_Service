@@ -1,6 +1,8 @@
+using System;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading.Tasks;
 using Abstractions.Infrastructure.Http;
 using Abstractions.Services;
 using Domain.Models.Crpt.Auth;

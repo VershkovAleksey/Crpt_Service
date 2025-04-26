@@ -2,6 +2,8 @@ using Abstractions.Infrastructure.Http;
 using Abstractions.Services;
 using BL.Infrastructure.Http;
 using BL.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Application.Extensions;
 

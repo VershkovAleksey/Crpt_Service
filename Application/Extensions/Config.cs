@@ -1,4 +1,6 @@
 using Domain.Settings;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Application.Extensions;
 

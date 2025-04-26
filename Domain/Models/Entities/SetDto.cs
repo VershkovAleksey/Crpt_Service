@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Domain.Models.Entities;
 
 public class SetDto
