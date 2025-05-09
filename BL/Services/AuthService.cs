@@ -20,40 +20,33 @@ public sealed class AuthService(ICrptHttpClient httpClient, ILogger<AuthService>
     private string? _token = null;
     private DateTime? _tokenExpiration = null;
 
-    public async Task<string> GetTokenAsync()
+    public async Task<AuthResponseDataDto?> GetAuthDataAsync(int userId, CancellationToken cancellationToken = default)
     {
-        if (_token is not null && _tokenExpiration is not null && _tokenExpiration.Value.AddHours(10) > DateTime.Now)
-        {
-            return _token;
-        }
+        var data = await _httpClient.GetAuthDataAsync(cancellationToken);
 
-        var data = await _httpClient.GetAuthDataAsync();
+         //var signData = SignData(Encoding.Default.GetBytes(data.Data), "Быченкова");
+        //
+        // var tokenResponse = await _httpClient.GetTokenAsync(new AuthSignedRequest()
+        // {
+        //     Uuid = data.Uuid!,
+        //     Data = signData
+        // });
+        //
+        // _logger.LogInformation(signData);
+        return data?.Data is null ? null : data;
+    }
 
-        if (data?.Data is null)
-        {
-            return string.Empty;
-        }
-        //подписание
+    public async Task<string> GetTokenAsync(AuthSignedRequest signInDto,
+        CancellationToken cancellationToken = default)
+    {
+        var tokenResponse = await _httpClient.GetTokenAsync(signInDto);
+        if (tokenResponse is null || !string.IsNullOrWhiteSpace(tokenResponse.Error))
+            throw new Exception(tokenResponse.Error + " " + tokenResponse.ErrorDescription);
 
-        var signData = SignData(Encoding.Default.GetBytes(data.Data), "Быченкова");
-
-        var tokenResponse = await _httpClient.GetTokenAsync(new AuthSignedRequest()
-        {
-            Uuid = data.Uuid!,
-            Data = signData
-        });
-
-        if (tokenResponse is not null && tokenResponse.Error is null)
-        {
-            _tokenExpiration = DateTime.Now;
-            _token = tokenResponse.Token;
-
-            return tokenResponse.Token!;
-        }
-        else
-        {
-            return string.Empty;
-        }
+        if (tokenResponse?.Token is null)
+            throw new Exception("Token is null");
+        
+        return tokenResponse?.Token!;
     }
 
     private CpX509Certificate2? GetCertificate(string signerName)
@@ -79,7 +72,7 @@ public sealed class AuthService(ICrptHttpClient httpClient, ILogger<AuthService>
     public string SignData(byte[] msg, string signerName, bool detached = false)
     {
         var sert = GetCertificate(signerName);
-        
+
         var contentInfo = new ContentInfo(msg);
         var signedCms = new CpSignedCms(contentInfo, detached);
         var cmsSigner = new CpCmsSigner(sert);

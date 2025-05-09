@@ -11,6 +11,7 @@ public static class Config
     {
         services.AddOptions();
         services.Configure<CrptHttpSettings>(config.GetSection(nameof(CrptHttpSettings)));
+        services.Configure<NationalCatalogHttpSettings>(config.GetSection(nameof(NationalCatalogHttpSettings)));
         return services;
     }
 }

@@ -42,6 +42,6 @@ public interface ICrptHttpClient
     /// <param name="token">Токен авторизации</param>
     /// <param name="request">Тело запроса</param>
     /// <param name="cancellationToken">Токен завершения</param>
-    Task<CreateSetsResponse?> CreateSetsAsync(string token, CreateDocumentBodyRequest request,
+    Task<string?> CreateSetsAsync(string token, CreateDocumentBodyRequest request,
         CancellationToken cancellationToken = default);
 }

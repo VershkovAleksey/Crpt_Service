@@ -120,10 +120,18 @@ public class HttpClientBase
             request.SetHeaders(headers);
         }
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
 
-        var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
+            var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        return JsonConvert.DeserializeObject<TResponse>(responseString);
+            var res = JsonConvert.DeserializeObject<TResponse>(responseString);
+            return res;
+        }
+        catch (Exception ex)
+        {
+            throw;
+        }
     }
 }

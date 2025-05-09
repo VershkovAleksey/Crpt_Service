@@ -52,13 +52,13 @@ public sealed class CrptHttpClient(
             cancellationToken);
     }
 
-    public async Task<CreateSetsResponse?> CreateSetsAsync(string token, CreateDocumentBodyRequest request,
+    public async Task<string?> CreateSetsAsync(string token, CreateDocumentBodyRequest request,
         CancellationToken cancellationToken = default)
     {
         const string routePostfix = "lk/documents/create?pg=lp";
 
-        return await SendRequestAsync<CreateDocumentBodyRequest, CreateSetsResponse>(token,
-            new Dictionary<string, string>(), routePostfix, true, "post", request,
+        return await SendRequestAsync<CreateDocumentBodyRequest, string>(token,
+            new Dictionary<string, string>(), routePostfix, false, "post", request,
             cancellationToken);
     }
 

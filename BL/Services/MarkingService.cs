@@ -1,13 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Abstractions.Infrastructure.Http;
 using Abstractions.Services;
+using Database.Context;
 using Domain.Models.Crpt.Marking.Dto;
+using Domain.Models.Crpt.Marking.Enums;
 using Domain.Models.Crpt.Marking.Request;
+using Domain.Models.NationalCatalog.Dto;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
@@ -16,19 +15,20 @@ namespace BL.Services;
 public sealed class MarkingService(
     ILogger<MarkingService> logger,
     ICrptHttpClient crptHttpClient,
+    CrptContext dbContext,
     IAuthService authService) : IMarkingService
 {
     private readonly ILogger<MarkingService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly CrptContext _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
 
     private readonly ICrptHttpClient _crptHttpClient =
         crptHttpClient ?? throw new ArgumentNullException(nameof(crptHttpClient));
 
     private readonly IAuthService _authService = authService ?? throw new ArgumentNullException(nameof(authService));
 
-    public async Task<List<MarkingListDto>?> GetIdentificationCodesAsync(CancellationToken cancellationToken = default)
+    public async Task<List<MarkingListDto>?> GetIdentificationCodesAsync(string token,
+        CancellationToken cancellationToken = default)
     {
-        var token = await _authService.GetTokenAsync();
-
         var cises = await _crptHttpClient.GetCisesAsync(token, MapRequest(), cancellationToken);
 
         if (cises is null || cises.Result.Length == 0)
@@ -45,7 +45,8 @@ public sealed class MarkingService(
         };
 
         var paginatedCises =
-            await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination), cancellationToken);
+            await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination),
+                cancellationToken);
 
         var ki = cises.Result.ToList();
 
@@ -90,44 +91,102 @@ public sealed class MarkingService(
         return result;
     }
 
-    public async Task CreateSetsAsync()
+    private bool FindUnits(IEnumerable<int> unitSetIds, IEnumerable<int> setIds)
     {
-        var token = await _authService.GetTokenAsync();
+        return setIds.Any(unitSetIds.Contains);
+    }
 
-        var cises = await GetIdentificationCodesAsync();
+    public async Task<CreateDocumentBodyRequest> CreateSetsAsync(string token, int userId,
+        CancellationToken cancellationToken = default)
+    {
+        var cises = await GetIdentificationCodesAsync(token, cancellationToken);
 
-        var sets = cises.Where(x => x.CisesType == "SET").ToList();
+        var setGtinsToCreate = _dbContext.CreateSetRequests
+            .Where(x => x.UserId == userId)
+            .Select(x => "0" + x.Gtin)
+            .Distinct()
+            .ToList();
 
-        var units = cises.Where(x => x.CisesType != "SET").ToList();
+        var setsToCreate = _dbContext.Sets
+            .Where(x => setGtinsToCreate.Contains("0" + x.Gtin))
+            .ToList();
+
+        var unitsFromDb = _dbContext.Units
+            .Where(x => x.UserId == userId)
+            .ToList();
+        //.Where(x => x.SetIds != null && x.SetIds.Count != 0 && FindUnits(x.SetIds, setIdsToCreate))
+        //.Select(x => x.Gtin);
+
+        var setsCisesList = cises
+            .Where(x => x.CisesType == "SET" && setGtinsToCreate.Contains(x.Gtin))
+            .ToList();
+
+        if (setsCisesList.Count == 0)
+        {
+            throw new Exception($"Не найдены коды маркировки для наборов:{setGtinsToCreate}");
+        }
+
+        var unitsCisesList = cises
+            .Where(x => x.CisesType != "SET" /*&& unitGtinsToCreate.Contains(x.Gtin)*/)
+            .ToList();
 
         var aggregationUnits = new List<AggregationUnit>();
-        var oneSet = new AggregationUnit()
-        {
-            UnitSerialNumber = sets.First().Cises.First().Cis,
-            Sntins = new[]
-            {
-                units.First().Cises.First().Cis,
-                units.Last().Cises.First().Cis
-            }
-        };
 
-        aggregationUnits.Add(oneSet);
+        for (var i = 0; i < setsToCreate.Count; i++)
+        {
+            var cisesOfSet = setsCisesList
+                .Where(x => x.Gtin == "0" + setsToCreate[i].Gtin)
+                .ToArray();
+            var unitsOfSet = unitsFromDb
+                .Where(x => x.UserId == userId && x.SetIds.Contains(setsToCreate[i].Id)).Select(x => x.Gtin)
+                .ToList();
+            var cisesOfUnit = unitsCisesList
+                .Where(x => unitsOfSet.Contains(x.Gtin.Remove(0, 1)))
+                .ToList();
+            var oneSet = new AggregationUnit()
+            {
+                UnitSerialNumber = cisesOfSet[i].Cises[i].Cis,
+                Sntins = cisesOfUnit.Select(x => x.Cises[i].Cis).ToArray(),
+            };
+
+            aggregationUnits.Add(oneSet);
+        }
+
 
         var requestBody = new CreateSetsRequest()
         {
             AggregationUnits = aggregationUnits,
-            ParticipantId = "212702137805"
+            ParticipantId = "212702137805" //TODO:Добавить User.Inn
         };
 
-        var requestBytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(requestBody));
+        var requestSerialized = JsonConvert.SerializeObject(requestBody);
 
-        var request = new CreateDocumentBodyRequest()
+        return new CreateDocumentBodyRequest()
         {
-            ProductDocument = Convert.ToBase64String(requestBytes),
-            Signature = _authService.SignData(requestBytes, "Быченкова", true)
+            ProductDocument = requestSerialized,
+            Signature = string.Empty
         };
+    }
 
-        await _crptHttpClient.CreateSetsAsync(token, request);
+    public async Task SignDataAsync(string token, int userId, CreateDocumentBodyRequest createDocumentBodyRequest,
+        CancellationToken cancellationToken = default)
+    {
+        createDocumentBodyRequest.ProductDocument =
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(createDocumentBodyRequest.ProductDocument));
+        var setId = await _crptHttpClient.CreateSetsAsync(token, createDocumentBodyRequest, cancellationToken);
+
+        if (setId is not null)
+        {
+            var createdSets = _dbContext.CreateSetRequests
+                .Where(x => x.UserId == userId && x.Status == (int)CreateSetStatus.Proccessed)
+                .ToList();
+
+            createdSets.All(x => x.Status == (int)CreateSetStatus.Created);
+            
+            _dbContext.CreateSetRequests.UpdateRange(createdSets);
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private GetCisesRequest MapRequest()
