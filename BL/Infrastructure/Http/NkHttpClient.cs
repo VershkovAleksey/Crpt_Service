@@ -20,8 +20,9 @@ public sealed class NkHttpClient(
 
     public async Task<GetProductListResponse?> GetProductListAsync(CancellationToken cancellationToken = default)
     {
-        var fromDate = DateTime.Now.AddDays(-20).ToString("yyyy-MM-dd HH:mm:ss");
-        var routePostfix = $"/v4/product-list?apikey={apiKey}&from_date={fromDate}";
+        var fromDate = DateTime.Now.AddYears(-1).AddMonths(-6).ToString("yyyy-MM-dd HH:mm:ss");
+        var toDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        var routePostfix = $"/v4/product-list?apikey={apiKey}&from_date={fromDate}&to_date={toDate}";
         return await GetAsync<GetProductListResponse>(_settings.Value.Url + routePostfix, cancellationToken);
     }
 

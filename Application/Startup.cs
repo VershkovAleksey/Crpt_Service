@@ -18,11 +18,19 @@ namespace Application;
 
 public class Startup
 {
-    public Startup()
+    public Startup(IWebHostEnvironment env)
     {
-        var configBuilder = new ConfigurationBuilder()
-            .AddJsonFile("appsettings.json")
-            .AddJsonFile("appsettings.development.json");
+        var configBuilder = new ConfigurationBuilder();
+        
+        if (env.IsDevelopment())
+        {
+            configBuilder.AddJsonFile("appsettings.development.json");
+        }
+
+        if (env.IsProduction())
+        {
+            configBuilder.AddJsonFile("appsettings.json");
+        }
 
         Configuration = configBuilder.Build();
     }
@@ -122,16 +130,20 @@ public class Startup
         if (env.IsDevelopment())
         {
             app.UseDeveloperExceptionPage();
-            app.UseSwaggerUI(options => // UseSwaggerUI is called only in Development.
-            {
-                options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
-            });
+            // app.UseSwaggerUI(options => // UseSwaggerUI is called only in Development.
+            // {
+            //     options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
+            // });
         }
         else
         {
             app.UseExceptionHandler("/Error");
             //app.UseHsts();
         }
+        app.UseSwaggerUI(options => // UseSwaggerUI is called only in Development.
+        {
+            options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
+        });
 
         app.UseAuthentication();
         app.UseRouting();

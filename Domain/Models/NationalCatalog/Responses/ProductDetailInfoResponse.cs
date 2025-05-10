@@ -10,7 +10,7 @@ public class ProductDetailInfoResponse
 
 public class ProductDetailInfoResult
 {
-    [JsonProperty("good_id")] public int GoodId { get; set; }
+    [JsonProperty("good_id")] public string GoodId { get; set; }
 
     [JsonProperty("identified_by")] public required IEnumerable<IdentifiedBy> IdentifiedBy { get; set; }
 
@@ -90,7 +90,7 @@ public class GoodAttrs
 
     [JsonProperty("attr_group_name")] public required string AttrGroupName { get; set; }
 
-    [JsonProperty("value_id")] public required int ValueId { get; set; }
+    [JsonProperty("value_id")] public required string ValueId { get; set; }
 
     public string? Gtin { get; set; }
 

@@ -82,6 +82,24 @@ public class HttpClientBase
             throw new Exception($"Exception while posting to {url}: {ex.Message}", ex);
         }
     }
+    
+    protected async Task<string?> PostAsync<TRequest>(string url, TRequest request,
+        CancellationToken cancellationToken,
+        IDictionary<string, string>? headers = null)
+    {
+        try
+        {
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, url);
+
+            httpRequestMessage.Content = JsonContent.Create(request);
+
+            return await SendAsync(httpRequestMessage, cancellationToken, headers);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Exception while posting to {url}: {ex.Message}", ex);
+        }
+    }
 
     protected async Task<TResponse?> PostSerialaizedAsync<TRequest, TResponse>(string url, TRequest request,
         CancellationToken cancellationToken, IDictionary<string, string>? headers = null)
@@ -134,4 +152,33 @@ public class HttpClientBase
             throw;
         }
     }
+    
+    /// <summary>
+    /// Отправка запроса с указанным типом
+    /// </summary>
+    /// <param name="request">Сущность сообщения</param>
+    /// <param name="cancellationToken">Токен завершения</param>
+    /// <param name="headers">Заголовки запроса</param>
+    /// <typeparam name="TResponse">Тип ответа</typeparam>
+    private async Task<string?> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken,
+        IDictionary<string, string>? headers = null)
+    {
+        if (headers != null)
+        {
+            request.SetHeaders(headers);
+        }
+
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+            return await response.Content.ReadAsStringAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            throw;
+        }
+    }
+    
+    
 }

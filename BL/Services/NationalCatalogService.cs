@@ -4,6 +4,7 @@ using Database.Context;
 using Database.Entities.CreateSetRequest;
 using Database.Entities.Sets;
 using Database.Entities.Units;
+using Domain.Models.Crpt.Marking.Enums;
 using Domain.Models.NationalCatalog;
 using Domain.Models.NationalCatalog.Dto;
 using Domain.Models.NationalCatalog.Responses;
@@ -72,6 +73,7 @@ public class NationalCatalogService(
             Gtin = setOptionDto.Gtin,
             UserId = userId,
             Count = setOptionDto.Count.Value,
+            Status = (int)CreateSetStatus.Proccessed
         };
     }
 

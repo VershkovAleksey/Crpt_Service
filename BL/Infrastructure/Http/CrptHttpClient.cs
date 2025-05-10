@@ -56,16 +56,19 @@ public sealed class CrptHttpClient(
         CancellationToken cancellationToken = default)
     {
         const string routePostfix = "lk/documents/create?pg=lp";
-
-        return await SendRequestAsync<CreateDocumentBodyRequest, string>(token,
-            new Dictionary<string, string>(), routePostfix, false, "post", request,
-            cancellationToken);
+        
+        var url = $"{_settings.Value.Url}{routePostfix}";
+        
+        return await PostAsync(url, request, cancellationToken, new Dictionary<string, string>()
+        {
+            {"Authorization", $"Bearer {token}"}
+        });
     }
 
     private async Task<TResponse?> SendRequestAsync<TRequest, TResponse>(
         string token, Dictionary<string, string> headers, string routePostfix, bool isApiV4, string requestMethod,
         TRequest request, CancellationToken cancellationToken = default, bool serialized = false)
-        where TRequest : class where TResponse : class
+        where TRequest : class
     {
         if (!string.IsNullOrWhiteSpace(token))
         {
@@ -80,7 +83,7 @@ public sealed class CrptHttpClient(
             ("POST") => serialized
                 ? await PostSerialaizedAsync<TRequest, TResponse>(url, request, cancellationToken, headers)
                 : await PostAsync<TRequest, TResponse>(url, request, cancellationToken, headers),
-            _ => null
+            _ => default
         };
     }
 }
