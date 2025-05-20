@@ -4,13 +4,10 @@ using Abstractions.Services;
 using Database.Context;
 using Database.Entities.CreateSetRequest;
 using Database.Entities.Sets;
-using Database.Entities.Units;
 using Domain.Models.Crpt.Marking.Dto;
 using Domain.Models.Crpt.Marking.Enums;
 using Domain.Models.Crpt.Marking.Request;
 using Domain.Models.Crpt.Marking.Response;
-using Domain.Models.NationalCatalog.Dto;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
@@ -20,10 +17,12 @@ public sealed class MarkingService(
     ILogger<MarkingService> logger,
     ICrptHttpClient crptHttpClient,
     CrptContext dbContext,
-    IAuthService authService) : IMarkingService
+    IAuthService authService,
+    ICurrentUserService currentUserService) : IMarkingService
 {
     private readonly ILogger<MarkingService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly CrptContext _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+    private readonly ICurrentUserService _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
 
     private readonly ICrptHttpClient _crptHttpClient =
         crptHttpClient ?? throw new ArgumentNullException(nameof(crptHttpClient));
@@ -128,7 +127,7 @@ public sealed class MarkingService(
             var cises = await GetIdentificationCodesAsync(token, cancellationToken);
 
             var createRequests = _dbContext.CreateSetRequests
-                .Where(x => x.UserId == userId && x.Status == (int)CreateSetStatus.Proccessed)
+                .Where(x => x.UserId == _currentUserService.CurrentUser.Id && x.Status == (int)CreateSetStatus.Proccessed)
                 .ToList();
 
             var setGtinsToCreate = createRequests
@@ -141,7 +140,7 @@ public sealed class MarkingService(
                 .ToList();
 
             var unitGtinsToCreate = _dbContext.Units
-                .Where(x => x.UserId == userId)
+                .Where(x => x.UserId == _currentUserService.CurrentUser.Id)
                 .ToList()
                 .Where(x => FindUnits(x.SetIds, setsToCreate.Select(x => x.Id)))
                 .Select(x => x.Gtin)
@@ -160,7 +159,7 @@ public sealed class MarkingService(
                 .Where(x => x.CisesType == "UNIT" && unitGtinsToCreate.Contains(x.Gtin.Remove(0, 1)))
                 .ToList();
 
-            var aggregationUnits = GetAggregationUnits(userId, createRequests, setsCisesList, setsToCreate,
+            var aggregationUnits = GetAggregationUnits(_currentUserService.CurrentUser.Id, createRequests, setsCisesList, setsToCreate,
                 unitsCisesList);
 
 

@@ -8,6 +8,7 @@ using Domain.Models.Crpt.Marking.Enums;
 using Domain.Models.NationalCatalog;
 using Domain.Models.NationalCatalog.Dto;
 using Domain.Models.NationalCatalog.Responses;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace BL.Services;
@@ -15,7 +16,8 @@ namespace BL.Services;
 public class NationalCatalogService(
     INkHttpClient nkHttpClient,
     ILogger<NationalCatalogService> logger,
-    CrptContext crptContext)
+    CrptContext crptContext,
+    ICurrentUserService currentUserService)
     : INationalCatalogService
 {
     private readonly INkHttpClient
@@ -23,6 +25,8 @@ public class NationalCatalogService(
 
     private readonly ILogger<NationalCatalogService>
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    
+    private readonly ICurrentUserService _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
 
     private readonly CrptContext _crptContext = crptContext ?? throw new ArgumentNullException(nameof(crptContext));
 
@@ -34,7 +38,7 @@ public class NationalCatalogService(
     public async Task<List<SetOptionDto>> GetSetsAsync()
     {
         //TODO:Переделать на currentUserId
-        return _crptContext.Sets.Where(x => x.UserId == 1).Select(x => new SetOptionDto()
+        return _crptContext.Sets.Where(x => x.UserId == _currentUserService.CurrentUser.Id).Select(x => new SetOptionDto()
         {
             Id = x.Id,
             SetName = x.SetName,
@@ -50,7 +54,7 @@ public class NationalCatalogService(
         try
         {
             //TODO:GetUserId
-            var entitiesToInsert = options.Select(x => MapSetRequest(x, 1)).ToList();
+            var entitiesToInsert = options.Select(x => MapSetRequest(x, _currentUserService.CurrentUser.Id)).ToList();
             await _crptContext.AddRangeAsync(entitiesToInsert, cancellationToken);
             await _crptContext.SaveChangesAsync(cancellationToken);
         }
@@ -62,6 +66,26 @@ public class NationalCatalogService(
         }
 
         return true;
+    }
+
+    public async Task<List<CreatedSetsDto>> GetSetsByUserIdAsync(int userId) =>
+        _crptContext.CreateSetRequests
+            .Where(x => x.UserId == userId)
+            .ToList()
+            .Select(x => MapSetsToDto(x))
+            .ToList();
+
+    private CreatedSetsDto MapSetsToDto(CreateSetRequestEntity setEntity)
+    {
+        return new CreatedSetsDto()
+        {
+            SetName = setEntity.SetName,
+            Status = (CreateSetStatus)setEntity.Status,
+            Response = setEntity.Response,
+            Count = setEntity.Count,
+            Gtin = setEntity.Gtin,
+            Id = setEntity.Id,
+        };
     }
 
     private CreateSetRequestEntity MapSetRequest(SetOptionDto setOptionDto, int userId)
@@ -80,9 +104,6 @@ public class NationalCatalogService(
     public async Task SeedDataAsync(CancellationToken cancellationToken = default)
     {
         var productResponse = await GetProductListAsync(cancellationToken);
-
-        var setsList = new List<SetEntity>();
-        var unitsList = new List<UnitEntity>();
 
         var productDetailInfoList = await GetProductDetailInfoListAsync(productResponse, cancellationToken);
 
@@ -127,7 +148,7 @@ public class NationalCatalogService(
                 Gtin = kit.Gtin ??
                        productListResponse.Result!.Goods!.FirstOrDefault(x => x.GoodName == kit.GoodName)!.Gtin ??
                        string.Empty,
-                UserId = 1, SetType = SetTypeEnum.Kit
+                UserId = _currentUserService.CurrentUser.Id, SetType = SetTypeEnum.Kit
             })
             .ToList();
 
@@ -143,7 +164,7 @@ public class NationalCatalogService(
                 Gtin = kit.Gtin ??
                        productListResponse.Result!.Goods!.FirstOrDefault(x => x.GoodName == kit.GoodName)!.Gtin ??
                        string.Empty,
-                UserId = 1, SetType = SetTypeEnum.Set
+                UserId = _currentUserService.CurrentUser.Id, SetType = SetTypeEnum.Set
             })
             .ToList();
 
@@ -158,7 +179,7 @@ public class NationalCatalogService(
         var result = new List<UnitEntity>();
 
         var setEntities = _crptContext.Sets
-            .Where(x => x.SetType == SetTypeEnum.Set && x.UserId == 1)
+            .Where(x => x.SetType == SetTypeEnum.Set && x.UserId == _currentUserService.CurrentUser.Id)
             .ToList();
 
         foreach (var productDetail in unitDetailInfoList)
@@ -171,7 +192,7 @@ public class NationalCatalogService(
                 Gtin = unit.Gtin ??
                        productListResponse.Result!.Goods!.FirstOrDefault(x => x.GoodName == unit.GoodName)!.Gtin ??
                        string.Empty,
-                UserId = 1,
+                UserId = _currentUserService.CurrentUser.Id,
             };
 
             var setsContainingUnit = productDetailInfoList

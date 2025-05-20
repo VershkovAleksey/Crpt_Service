@@ -10,7 +10,7 @@ namespace Application.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class UserController(ICurrentUserService currentUserService) : Controller
+public class UserController(ICurrentUserService currentUserService) : ControllerBase
 {
     private readonly ICurrentUserService _currentUserService =
         currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
@@ -21,19 +21,21 @@ public class UserController(ICurrentUserService currentUserService) : Controller
     /// <param name="username">Имя пользователя</param>
     /// <param name="password">Пароль</param>
     /// <returns>Токен</returns>
-    [HttpPost("/token")]
-    public async Task<IActionResult> Token([FromQuery, Required] string username, [FromQuery, Required] string password)
+    [HttpPost]
+    [Route("auth")]
+    public async Task<IActionResult> Token([FromBody, Required] AuthDto authDto)
     {
-        var tokenResponse = await _currentUserService.GetToken(username, password);
+        var tokenResponse = await _currentUserService.GetToken(authDto.Username, authDto.Password);
 
-        return Json(tokenResponse);
+        return Ok(tokenResponse);
     }
 
-    [HttpPost("/register")]
+    [HttpPost]
+    [Route("register")]
     public async Task<IActionResult> Register([FromBody, Required] RegisterDto registerDto)
     {
         var response = await _currentUserService.RegisterUser(registerDto);
 
-        return Json(response);
+        return Ok(response);
     }
 }

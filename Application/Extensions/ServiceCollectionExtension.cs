@@ -1,5 +1,6 @@
 using Abstractions.Infrastructure.Http;
 using Abstractions.Services;
+using Application.Extensions.Middlewares;
 using BL.Infrastructure.Http;
 using BL.Services;
 
@@ -17,4 +18,8 @@ public static class ServiceCollectionExtension
         services.AddScoped<INationalCatalogService, NationalCatalogService>();
         return services;
     }
+    
+    public static IApplicationBuilder UseCurrentUserMiddleware(
+        this IApplicationBuilder app)
+        => app.UseMiddleware<CurrentUserMiddleware>();
 }

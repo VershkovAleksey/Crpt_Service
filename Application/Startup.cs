@@ -1,4 +1,6 @@
 using Application.Extensions;
+using Application.Extensions.Middlewares;
+using BL.Services;
 using DAL;
 using Database.Context;
 using Domain.Settings;
@@ -21,7 +23,7 @@ public class Startup
     public Startup(IWebHostEnvironment env)
     {
         var configBuilder = new ConfigurationBuilder();
-        
+
         if (env.IsDevelopment())
         {
             configBuilder.AddJsonFile("appsettings.development.json");
@@ -57,7 +59,7 @@ public class Startup
                         .SetIsOriginAllowedToAllowWildcardSubdomains();
                 });
         });
-        
+
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
@@ -83,9 +85,13 @@ public class Startup
                 };
             });
 
+        services.AddAuthorization();
+
         services.AddEndpointsApiExplorer();
         services.AddSettings(Configuration);
         services.AddServices(Configuration);
+
+        //services.AddTransient<CurrentUserMiddleware>();
 
         services.AddSwaggerGen(c =>
         {
@@ -140,17 +146,21 @@ public class Startup
             app.UseExceptionHandler("/Error");
             //app.UseHsts();
         }
+
         app.UseSwaggerUI(options => // UseSwaggerUI is called only in Development.
         {
             options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
         });
-
+        
         app.UseAuthentication();
         app.UseRouting();
         app.UseCors();
+        
+        app.UseCurrentUserMiddleware();
         app.UseAuthorization();
         app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
         app.UseHttpsRedirection();
         app.UseStaticFiles();
+        
     }
 }

@@ -17,6 +17,8 @@ public class CurrentUserService(CrptContext dbContext, ILogger<CurrentUserServic
     private readonly CrptContext _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
     private readonly ILogger<CurrentUserService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
+    public UserEntity CurrentUser { get; private set; }
+
     public async Task<TokenResponse> RegisterUser(RegisterDto registerDto)
     {
         var newUser = new UserEntity()
@@ -64,7 +66,7 @@ public class CurrentUserService(CrptContext dbContext, ILogger<CurrentUserServic
             UserName = identity.Name
         };
     }
-    
+
     /// <summary>
     /// Получение токена
     /// </summary>
@@ -77,22 +79,24 @@ public class CurrentUserService(CrptContext dbContext, ILogger<CurrentUserServic
         var user = _dbContext.Users.FirstOrDefault(x =>
             (x.Login == username || x.Email == username) && x.PasswordHash == hPassword);
 
-        if (user != null)
-        {
-            var claims = new List<Claim>
-            {
-                new(ClaimsIdentity.DefaultNameClaimType, user.Id.ToString()),
-                new(ClaimsIdentity.DefaultRoleClaimType, user.Role ?? "User")
-            };
+        if (user == null)
+            return null;
 
-            var claimsIdentity =
-                new ClaimsIdentity(claims, "Token", ClaimsIdentity.DefaultNameClaimType,
-                    ClaimsIdentity.DefaultRoleClaimType);
-            return claimsIdentity;
-        }
+        var claims = new List<Claim>
+        {
+            new(ClaimsIdentity.DefaultNameClaimType, user.FirstName + " " + user.LastName),
+            new(ClaimsIdentity.DefaultRoleClaimType, user.Role ?? "User"),
+            new("UserId", user.Id.ToString()),
+            new("Inn", user.Inn ?? string.Empty),
+            new("ApiKey", user.NkApiKey ?? string.Empty)
+        };
+
+        var claimsIdentity =
+            new ClaimsIdentity(claims, "Token", ClaimsIdentity.DefaultNameClaimType,
+                ClaimsIdentity.DefaultRoleClaimType);
+        return claimsIdentity;
 
         // если пользователя не найдено
-        return null;
     }
 
     private string ComputeHash(string input, HashAlgorithm algorithm)
@@ -102,5 +106,18 @@ public class CurrentUserService(CrptContext dbContext, ILogger<CurrentUserServic
         var hashedBytes = algorithm.ComputeHash(inputBytes);
 
         return BitConverter.ToString(hashedBytes);
+    }
+
+    public void SetCurrentUser(int userId)
+    {
+        var currentUser = _dbContext.Users.FirstOrDefault(x => x.Id == userId);
+        if (currentUser is not null)
+        {
+            CurrentUser = currentUser;
+        }
+        else
+        {
+            throw new Exception("Пользователь с таким Id не найден");
+        }
     }
 }
