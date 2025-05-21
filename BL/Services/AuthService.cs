@@ -6,8 +6,8 @@ using System.Threading.Tasks;
 using Abstractions.Infrastructure.Http;
 using Abstractions.Services;
 using Domain.Models.Crpt.Auth;
-using CryptoPro.Security.Cryptography.Pkcs;
-using CryptoPro.Security.Cryptography.X509Certificates;
+// using CryptoPro.Security.Cryptography.Pkcs;
+// using CryptoPro.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 
 namespace BL.Services;
@@ -49,37 +49,37 @@ public sealed class AuthService(ICrptHttpClient httpClient, ILogger<AuthService>
         return tokenResponse?.Token!;
     }
 
-    private CpX509Certificate2? GetCertificate(string signerName)
-    {
-        var storeMy = new CpX509Store(StoreName.My,
-            StoreLocation.CurrentUser);
-        storeMy.Open(OpenFlags.ReadOnly);
-
-        var certColl =
-            storeMy.Certificates.Find(X509FindType.FindBySubjectName,
-                signerName, true);
-
-        if (certColl.Count == 0)
-        {
-            return null;
-        }
-
-        storeMy.Close();
-
-        return certColl[0];
-    }
-
-    public string SignData(byte[] msg, string signerName, bool detached = false)
-    {
-        var sert = GetCertificate(signerName);
-
-        var contentInfo = new ContentInfo(msg);
-        var signedCms = new CpSignedCms(contentInfo, detached);
-        var cmsSigner = new CpCmsSigner(sert);
-
-        signedCms.ComputeSignature(cmsSigner);
-        var byteSign = signedCms.Encode();
-
-        return Convert.ToBase64String(byteSign);
-    }
+    // private CpX509Certificate2? GetCertificate(string signerName)
+    // {
+    //     var storeMy = new CpX509Store(StoreName.My,
+    //         StoreLocation.CurrentUser);
+    //     storeMy.Open(OpenFlags.ReadOnly);
+    //
+    //     var certColl =
+    //         storeMy.Certificates.Find(X509FindType.FindBySubjectName,
+    //             signerName, true);
+    //
+    //     if (certColl.Count == 0)
+    //     {
+    //         return null;
+    //     }
+    //
+    //     storeMy.Close();
+    //
+    //     return certColl[0];
+    // }
+    //
+    // public string SignData(byte[] msg, string signerName, bool detached = false)
+    // {
+    //     var sert = GetCertificate(signerName);
+    //
+    //     var contentInfo = new ContentInfo(msg);
+    //     var signedCms = new CpSignedCms(contentInfo, detached);
+    //     var cmsSigner = new CpCmsSigner(sert);
+    //
+    //     signedCms.ComputeSignature(cmsSigner);
+    //     var byteSign = signedCms.Encode();
+    //
+    //     return Convert.ToBase64String(byteSign);
+    // }
 }

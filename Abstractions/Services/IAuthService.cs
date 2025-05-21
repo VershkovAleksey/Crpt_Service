@@ -7,7 +7,7 @@ public interface IAuthService
 {
     public Task<AuthResponseDataDto?> GetAuthDataAsync(int userId, CancellationToken cancellationToken = default);
 
-    string SignData(byte[] msg, string signerName, bool detached = false);
+    // string SignData(byte[] msg, string signerName, bool detached = false);
 
     public Task<string> GetTokenAsync(AuthSignedRequest signInDto, CancellationToken cancellationToken = default);
 }
