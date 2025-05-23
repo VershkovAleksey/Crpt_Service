@@ -50,14 +50,11 @@ public class Startup
 
         services.AddCors(options =>
         {
-            options.AddDefaultPolicy(
-                builder =>
-                {
-                    builder.AllowAnyOrigin()
-                        .AllowAnyHeader()
-                        .AllowAnyMethod()
-                        .SetIsOriginAllowedToAllowWildcardSubdomains();
-                });
+            options.AddPolicy("VuePolicy",
+                builder => builder.WithOrigins("http://130.193.52.139:8081", "http://130.193.52.139:8080")
+                    .AllowAnyMethod()
+                    .AllowAnyHeader()
+                    .AllowCredentials());
         });
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -154,7 +151,7 @@ public class Startup
         
         app.UseAuthentication();
         app.UseRouting();
-        app.UseCors();
+        app.UseCors("VuePolicy");
         
         app.UseCurrentUserMiddleware();
         app.UseAuthorization();
