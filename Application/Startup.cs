@@ -51,7 +51,7 @@ public class Startup
         services.AddCors(options =>
         {
             options.AddPolicy("VuePolicy",
-                builder => builder.WithOrigins("http://130.193.52.139:8081", "http://130.193.52.139:8080")
+                builder => builder.WithOrigins("http://130.193.52.139:8081", "http://130.193.52.139:8080", "http://130.193.52.139:80")
                     .AllowAnyMethod()
                     .AllowAnyHeader()
                     .AllowCredentials());
@@ -149,14 +149,14 @@ public class Startup
             options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
         });
         
-        app.UseAuthentication();
         app.UseRouting();
         app.UseCors("VuePolicy");
-        
+
         app.UseCurrentUserMiddleware();
+        app.UseAuthentication();
         app.UseAuthorization();
         app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
-        app.UseHttpsRedirection();
+        //app.UseHttpsRedirection();
         app.UseStaticFiles();
         
     }
