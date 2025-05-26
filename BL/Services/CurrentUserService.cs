@@ -15,14 +15,9 @@ namespace BL.Services;
 
 public class CurrentUserService(
     CrptContext dbContext,
-    ILogger<CurrentUserService> logger,
-    INationalCatalogService nationalCatalogService) : ICurrentUserService
+    ILogger<CurrentUserService> logger) : ICurrentUserService
 {
     private readonly CrptContext _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
-
-    private readonly INationalCatalogService _nationalCatalogService =
-        nationalCatalogService ?? throw new ArgumentNullException(nameof(nationalCatalogService));
-
     private readonly ILogger<CurrentUserService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     public UserEntity CurrentUser { get; private set; }
@@ -46,8 +41,6 @@ public class CurrentUserService(
         await _dbContext.SaveChangesAsync();
 
         CurrentUser = await _dbContext.Users.FirstAsync(x => x.Login == newUser.Login && x.PasswordHash == newUser.PasswordHash);
-
-        await _nationalCatalogService.SeedDataAsync();
         
         return (await GetToken(registerDto.Email, registerDto.Password))!;
     }

@@ -10,10 +10,11 @@ namespace Application.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class UserController(ICurrentUserService currentUserService) : ControllerBase
+public class UserController(ICurrentUserService currentUserService, INationalCatalogService nationalCatalogService) : ControllerBase
 {
     private readonly ICurrentUserService _currentUserService =
         currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
+    private readonly INationalCatalogService _nationalCatalogService = nationalCatalogService ?? throw new ArgumentNullException(nameof(nationalCatalogService));
 
     /// <summary>
     /// Получение токена авторизации
@@ -35,6 +36,8 @@ public class UserController(ICurrentUserService currentUserService) : Controller
     public async Task<IActionResult> Register([FromBody, Required] RegisterDto registerDto)
     {
         var response = await _currentUserService.RegisterUser(registerDto);
+
+        await _nationalCatalogService.SeedDataAsync();
 
         return Ok(response);
     }
