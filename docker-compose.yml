@@ -10,3 +10,23 @@ services:
       POSTGRES_DB: crpt-service-database
     ports:
       - "5432:5432"
+    networks:
+      - app-network
+
+  backend:
+    container_name: backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=crpt-service-database;Username=postgres_user;Password=postgres_password
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
