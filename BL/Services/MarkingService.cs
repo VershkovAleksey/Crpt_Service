@@ -164,7 +164,7 @@ public sealed class MarkingService(
             }
 
             var unitsCisesList = cises
-                .Where(x => x.CisesType == "UNIT" && unitGtinsToCreate.Contains(x.Gtin))
+                .Where(x => x.CisesType == "UNIT" && unitGtinsToCreate.Contains(x.Gtin.Remove(0,1)))
                 .ToList();
 
             var aggregationUnits = GetAggregationUnits(_currentUserService.CurrentUser.Id, createRequests,
