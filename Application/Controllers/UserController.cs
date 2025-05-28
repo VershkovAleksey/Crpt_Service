@@ -10,11 +10,14 @@ namespace Application.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class UserController(ICurrentUserService currentUserService, INationalCatalogService nationalCatalogService) : ControllerBase
+public class UserController(ICurrentUserService currentUserService, INationalCatalogService nationalCatalogService)
+    : ControllerBase
 {
     private readonly ICurrentUserService _currentUserService =
         currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
-    private readonly INationalCatalogService _nationalCatalogService = nationalCatalogService ?? throw new ArgumentNullException(nameof(nationalCatalogService));
+
+    private readonly INationalCatalogService _nationalCatalogService =
+        nationalCatalogService ?? throw new ArgumentNullException(nameof(nationalCatalogService));
 
     /// <summary>
     /// Получение токена авторизации
@@ -26,19 +29,33 @@ public class UserController(ICurrentUserService currentUserService, INationalCat
     [Route("auth")]
     public async Task<IActionResult> Token([FromBody, Required] AuthDto authDto)
     {
-        var tokenResponse = await _currentUserService.GetToken(authDto.Username, authDto.Password);
+        try
+        {
+            var tokenResponse = await _currentUserService.GetToken(authDto.Username, authDto.Password);
 
-        return Ok(tokenResponse);
+            return Ok(tokenResponse);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpPost]
     [Route("register")]
     public async Task<IActionResult> Register([FromBody, Required] RegisterDto registerDto)
     {
-        var response = await _currentUserService.RegisterUser(registerDto);
+        try
+        {
+            var response = await _currentUserService.RegisterUser(registerDto);
 
-        await _nationalCatalogService.SeedDataAsync();
+            await _nationalCatalogService.SeedDataAsync();
 
-        return Ok(response);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ex.Message);
+        }
     }
 }

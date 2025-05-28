@@ -152,7 +152,7 @@ public sealed class MarkingService(
 
             if (setsCisesList.Count == 0)
             {
-                throw new Exception($"Не найдены коды маркировки для наборов:{setGtinsToCreate}");
+                throw new Exception($"Не найдены коды маркировки для наборов:{JsonConvert.SerializeObject(setGtinsToCreate)}");
             }
 
             var unitsCisesList = cises

@@ -25,16 +25,30 @@ public class MarkingController : ControllerBase
     [Route("send-sets-to-mark")]
     public async Task<IActionResult> SendSetsToMarkAsync([FromBody, Required] SendSetsDto request)
     {
-        await _markingService.SignDataAsync(request.Token, _currentUserService.CurrentUser.Id, request.Request);
-        return Ok();
+        try
+        {
+            await _markingService.SignDataAsync(request.Token, _currentUserService.CurrentUser.Id, request.Request);
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpPost]
     [Route("data-to-sign")]
     public async Task<IActionResult> GetSignDataAsync([FromBody, Required] signDataRequest token)
     {
-        var res = await _markingService.CreateSetsAsync(token.Token, _currentUserService.CurrentUser.Id);
-        return Ok(res);
+        try
+        {
+            var res = await _markingService.CreateSetsAsync(token.Token, _currentUserService.CurrentUser.Id);
+            return Ok(res);
+        }
+        catch (Exception e)
+        {
+            return BadRequest(e.Message);
+        }
     }
 }
 
