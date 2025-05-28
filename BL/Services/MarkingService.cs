@@ -22,7 +22,9 @@ public sealed class MarkingService(
 {
     private readonly ILogger<MarkingService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly CrptContext _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
-    private readonly ICurrentUserService _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
+
+    private readonly ICurrentUserService _currentUserService =
+        currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
 
     private readonly ICrptHttpClient _crptHttpClient =
         crptHttpClient ?? throw new ArgumentNullException(nameof(crptHttpClient));
@@ -125,18 +127,23 @@ public sealed class MarkingService(
         try
         {
             var cises = await GetIdentificationCodesAsync(token, cancellationToken);
-
+            
+            _logger.LogInformation("Cises: {cises}", JsonConvert.SerializeObject(cises));
+            
             var createRequests = _dbContext.CreateSetRequests
-                .Where(x => x.UserId == _currentUserService.CurrentUser.Id && x.Status == (int)CreateSetStatus.Proccessed)
+                .Where(x => x.UserId == _currentUserService.CurrentUser.Id &&
+                            x.Status == (int)CreateSetStatus.Proccessed)
                 .ToList();
 
             var setGtinsToCreate = createRequests
-                .Select(x => "0" + x.Gtin)
+                .Select(x => x.Gtin)
                 .Distinct()
                 .ToList();
 
+            _logger.LogInformation("Gtins of sets to create: {gtins}", JsonConvert.SerializeObject(setGtinsToCreate));
+
             var setsToCreate = _dbContext.Sets
-                .Where(x => setGtinsToCreate.Contains("0" + x.Gtin))
+                .Where(x => setGtinsToCreate.Contains(x.Gtin))
                 .ToList();
 
             var unitGtinsToCreate = _dbContext.Units
@@ -152,21 +159,23 @@ public sealed class MarkingService(
 
             if (setsCisesList.Count == 0)
             {
-                throw new Exception($"Не найдены коды маркировки для наборов:{JsonConvert.SerializeObject(setGtinsToCreate)}");
+                throw new Exception(
+                    $"Не найдены коды маркировки для наборов:{JsonConvert.SerializeObject(setGtinsToCreate)}");
             }
 
             var unitsCisesList = cises
-                .Where(x => x.CisesType == "UNIT" && unitGtinsToCreate.Contains(x.Gtin.Remove(0, 1)))
+                .Where(x => x.CisesType == "UNIT" && unitGtinsToCreate.Contains(x.Gtin))
                 .ToList();
 
-            var aggregationUnits = GetAggregationUnits(_currentUserService.CurrentUser.Id, createRequests, setsCisesList, setsToCreate,
+            var aggregationUnits = GetAggregationUnits(_currentUserService.CurrentUser.Id, createRequests,
+                setsCisesList, setsToCreate,
                 unitsCisesList);
 
 
             var requestBody = new CreateSetsRequest()
             {
                 AggregationUnits = aggregationUnits,
-                ParticipantId = _currentUserService.CurrentUser.Inn //TODO:Добавить User.Inn
+                ParticipantId = _currentUserService.CurrentUser.Inn
             };
 
             var requestSerialized = JsonConvert.SerializeObject(requestBody);
