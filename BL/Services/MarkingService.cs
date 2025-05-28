@@ -88,44 +88,43 @@ public sealed class MarkingService(
     private async Task<List<GetCisesResult>> GetCisesAsync(string token, IEnumerable<string> gtins,
         CancellationToken cancellationToken)
     {
-        var cisesFirstPage = await _crptHttpClient.GetCisesAsync(token, MapRequest(gtins), cancellationToken);
-
-        if (cisesFirstPage is null || cisesFirstPage.Result.Length == 0)
+        try
         {
-            return null;
+            var cisesFirstPage = await _crptHttpClient.GetCisesAsync(token, MapRequest(gtins), cancellationToken);
+
+
+            if (cisesFirstPage is null || cisesFirstPage.Result.Length == 0)
+            {
+                return null;
+            }
+            
+            while (!cisesFirstPage.IsLastPage)
+            {
+                var pagination = new Pagination()
+                {
+                    LastEmissionDate = cisesFirstPage.Result.Last().EmissionDate,
+                    Sgtin = cisesFirstPage.Result.Last().Sgtin,
+                    Direction = 0
+                };
+                
+                var paginatedCises =
+                    await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination, gtins),
+                        cancellationToken);
+
+                cisesFirstPage.Result = cisesFirstPage.Result.Concat(paginatedCises.Result).ToArray();
+                cisesFirstPage.IsLastPage = paginatedCises.IsLastPage;
+            }
+
+            List<GetCisesResult> allCises = cisesFirstPage.Result.Where(x => x.Status == "APPLIED").ToList();
+
+            return allCises;
         }
-
-        var pagination = new Pagination()
+        catch (Exception e)
         {
-            LastEmissionDate =
-                cisesFirstPage.Result.Last(x => !string.IsNullOrWhiteSpace(x.EmissionDate)).EmissionDate ??
-                string.Empty,
-            Sgtin = cisesFirstPage.Result.Last().Sgtin,
-            Direction = 0
-        };
-
-        var paginatedCisesZero =
-            await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination, gtins),
-                cancellationToken);
-
-        pagination.Direction = 1;
-
-        var paginatedCisesOne = await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination, gtins),
-            cancellationToken);
-
-        var allCises = cisesFirstPage.Result.Where(x => x.Status == "APPLIED").ToList();
-
-        if (paginatedCisesZero is not null)
-        {
-            allCises = allCises.Concat(paginatedCisesZero.Result.Where(x => x.Status == "APPLIED")).ToList();
+            _logger.LogError(e, "{ClassName}.{MethodName}: {Message}", nameof(MarkingService), nameof(GetCisesAsync),
+                e.Message);
+            throw;
         }
-
-        if (paginatedCisesOne is not null)
-        {
-            allCises = allCises.Concat(paginatedCisesOne.Result.Where(x => x.Status == "APPLIED")).ToList();
-        }
-
-        return allCises;
     }
 
     private bool FindUnits(IEnumerable<int> unitSetIds, IEnumerable<int> setIds)
@@ -234,11 +233,20 @@ public sealed class MarkingService(
                 var unitsOfSet = _dbContext.Units
                     .Where(x => x.UserId == userId && x.SetIds.Contains(setId.Value))
                     .Select(x => x.Gtin)
+                    .Distinct()
                     .ToList();
 
                 var cisesOfUnit = unitsCisesList
                     .Where(x => unitsOfSet.Contains(x.Gtin.Remove(0, 1)))
                     .ToList();
+
+                if (cisesOfUnit.Any(x => x.Cises.Count < createSetRequest.Count))
+                {
+                    var unit = cisesOfUnit.First(x => x.Cises.Count < createSetRequest.Count);
+                    _logger.LogError($"Не хватает кодов маркировки под gtin:{unit.Gtin}");
+                    break;
+                    throw new Exception($"Не хватает кодов маркировки под gtin:{unit.Gtin}");
+                }
 
                 var oneSet = new AggregationUnit()
                 {
@@ -286,7 +294,7 @@ public sealed class MarkingService(
         {
             Filter = new CisesFilter()
             {
-                Gtins = gtin.ToArray()
+                Gtins = gtin.ToArray(),
             }
         };
 
@@ -300,7 +308,7 @@ public sealed class MarkingService(
         {
             Filter = new CisesFilter()
             {
-                Gtins = gtin.ToArray()
+                Gtins = gtin.ToArray(),
             },
             Pagination = pagination
         };
