@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Text;
 using Abstractions.Infrastructure.Http;
 using Abstractions.Services;
@@ -31,10 +32,10 @@ public sealed class MarkingService(
 
     private readonly IAuthService _authService = authService ?? throw new ArgumentNullException(nameof(authService));
 
-    public async Task<List<MarkingListDto>?> GetIdentificationCodesAsync(string token,
+    public async Task<List<MarkingListDto>?> GetIdentificationCodesAsync(string token, IEnumerable<string> gtins,
         CancellationToken cancellationToken = default)
     {
-        var cises = await GetCisesAsync(token, cancellationToken);
+        var cises = await GetCisesAsync(token, gtins, cancellationToken);
 
         var result = new List<MarkingListDto>();
 
@@ -84,9 +85,10 @@ public sealed class MarkingService(
             { Cises = unitsList, CisesType = unitsList.First().GeneralPackageType, Gtin = unitsList.First().Gtin! });
     }
 
-    private async Task<List<GetCisesResult>> GetCisesAsync(string token, CancellationToken cancellationToken)
+    private async Task<List<GetCisesResult>> GetCisesAsync(string token, IEnumerable<string> gtins,
+        CancellationToken cancellationToken)
     {
-        var cisesFirstPage = await _crptHttpClient.GetCisesAsync(token, MapRequest(), cancellationToken);
+        var cisesFirstPage = await _crptHttpClient.GetCisesAsync(token, MapRequest(gtins), cancellationToken);
 
         if (cisesFirstPage is null || cisesFirstPage.Result.Length == 0)
         {
@@ -102,15 +104,25 @@ public sealed class MarkingService(
             Direction = 0
         };
 
-        var paginatedCises =
-            await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination),
+        var paginatedCisesZero =
+            await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination, gtins),
                 cancellationToken);
+
+        pagination.Direction = 1;
+
+        var paginatedCisesOne = await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination, gtins),
+            cancellationToken);
 
         var allCises = cisesFirstPage.Result.Where(x => x.Status == "APPLIED").ToList();
 
-        if (paginatedCises is not null)
+        if (paginatedCisesZero is not null)
         {
-            allCises = allCises.Concat(paginatedCises.Result.Where(x => x.Status == "APPLIED")).ToList();
+            allCises = allCises.Concat(paginatedCisesZero.Result.Where(x => x.Status == "APPLIED")).ToList();
+        }
+
+        if (paginatedCisesOne is not null)
+        {
+            allCises = allCises.Concat(paginatedCisesOne.Result.Where(x => x.Status == "APPLIED")).ToList();
         }
 
         return allCises;
@@ -126,10 +138,6 @@ public sealed class MarkingService(
     {
         try
         {
-            var cises = await GetIdentificationCodesAsync(token, cancellationToken);
-
-            _logger.LogInformation("Cises: {cises}", JsonConvert.SerializeObject(cises));
-
             var createRequests = _dbContext.CreateSetRequests
                 .Where(x => x.UserId == _currentUserService.CurrentUser.Id &&
                             x.Status == (int)CreateSetStatus.Proccessed)
@@ -140,8 +148,6 @@ public sealed class MarkingService(
                 .Distinct()
                 .ToList();
 
-            _logger.LogInformation("Gtins of sets to create: {gtins}", JsonConvert.SerializeObject(setGtinsToCreate));
-
             var setsToCreate = _dbContext.Sets
                 .Where(x => setGtinsToCreate.Contains(x.Gtin))
                 .ToList();
@@ -151,7 +157,17 @@ public sealed class MarkingService(
                 .ToList()
                 .Where(x => FindUnits(x.SetIds, setsToCreate.Select(x => x.Id)))
                 .Select(x => x.Gtin)
+                .Distinct()
                 .ToList();
+
+            var gtinsToCreate = setGtinsToCreate.Concat(unitGtinsToCreate).ToList();
+
+            var cises = await GetIdentificationCodesAsync(token, gtinsToCreate, cancellationToken);
+
+            //_logger.LogInformation("Cises: {cises}", JsonConvert.SerializeObject(cises));
+
+            _logger.LogInformation("Gtins of sets to create: {gtins}", JsonConvert.SerializeObject(setGtinsToCreate));
+
 
             var setsCisesList = cises
                 .Where(x => x.CisesType == "SET" && setGtinsToCreate.Contains(x.Gtin.Remove(0, 1)))
@@ -164,8 +180,14 @@ public sealed class MarkingService(
             }
 
             var unitsCisesList = cises
-                .Where(x => x.CisesType == "UNIT" && unitGtinsToCreate.Contains(x.Gtin.Remove(0,1)))
+                .Where(x => x.CisesType == "UNIT" && unitGtinsToCreate.Contains(x.Gtin.Remove(0, 1)))
                 .ToList();
+
+            if (unitsCisesList.Count == 0)
+            {
+                throw new Exception(
+                    $"Не найдены коды маркировки для товаров:{JsonConvert.SerializeObject(unitGtinsToCreate)}");
+            }
 
             var aggregationUnits = GetAggregationUnits(_currentUserService.CurrentUser.Id, createRequests,
                 setsCisesList, setsToCreate,
@@ -257,24 +279,28 @@ public sealed class MarkingService(
         }
     }
 
-    private GetCisesRequest MapRequest()
+    private GetCisesRequest MapRequest(IEnumerable<string> gtins)
     {
+        var gtin = gtins.Select(x => "0" + x);
         var request = new GetCisesRequest
         {
             Filter = new CisesFilter()
             {
+                Gtins = gtin.ToArray()
             }
         };
 
         return request;
     }
 
-    private GetCisesRequest MapPaginationRequest(Pagination pagination)
+    private GetCisesRequest MapPaginationRequest(Pagination pagination, IEnumerable<string> gtins)
     {
+        var gtin = gtins.Select(x => "0" + x);
         var request = new GetCisesRequest
         {
             Filter = new CisesFilter()
             {
+                Gtins = gtin.ToArray()
             },
             Pagination = pagination
         };
