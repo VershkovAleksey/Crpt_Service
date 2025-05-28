@@ -166,7 +166,7 @@ public sealed class MarkingService(
             var requestBody = new CreateSetsRequest()
             {
                 AggregationUnits = aggregationUnits,
-                ParticipantId = "212702137805" //TODO:Добавить User.Inn
+                ParticipantId = _currentUserService.CurrentUser.Inn //TODO:Добавить User.Inn
             };
 
             var requestSerialized = JsonConvert.SerializeObject(requestBody);
