@@ -127,9 +127,9 @@ public sealed class MarkingService(
         try
         {
             var cises = await GetIdentificationCodesAsync(token, cancellationToken);
-            
+
             _logger.LogInformation("Cises: {cises}", JsonConvert.SerializeObject(cises));
-            
+
             var createRequests = _dbContext.CreateSetRequests
                 .Where(x => x.UserId == _currentUserService.CurrentUser.Id &&
                             x.Status == (int)CreateSetStatus.Proccessed)
@@ -154,7 +154,7 @@ public sealed class MarkingService(
                 .ToList();
 
             var setsCisesList = cises
-                .Where(x => x.CisesType == "SET" && setGtinsToCreate.Contains(x.Gtin))
+                .Where(x => x.CisesType == "SET" && setGtinsToCreate.Contains(x.Gtin.Remove(0, 1)))
                 .ToList();
 
             if (setsCisesList.Count == 0)
