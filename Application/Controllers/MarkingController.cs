@@ -31,9 +31,14 @@ public class MarkingController : ControllerBase
 
     [HttpPost]
     [Route("data-to-sign")]
-    public async Task<IActionResult> GetSignDataAsync([FromHeader(Name = "token"), Required] string token)
+    public async Task<IActionResult> GetSignDataAsync([FromBody, Required] signDataRequest token)
     {
-        var res = await _markingService.CreateSetsAsync(token, _currentUserService.CurrentUser.Id);
+        var res = await _markingService.CreateSetsAsync(token.Token, _currentUserService.CurrentUser.Id);
         return Ok(res);
     }
+}
+
+public class signDataRequest
+{
+    public string Token { get; set; }
 }
