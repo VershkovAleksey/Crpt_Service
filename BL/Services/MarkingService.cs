@@ -97,7 +97,7 @@ public sealed class MarkingService(
             {
                 return null;
             }
-            
+
             while (!cisesFirstPage.IsLastPage)
             {
                 var pagination = new Pagination()
@@ -106,7 +106,7 @@ public sealed class MarkingService(
                     Sgtin = cisesFirstPage.Result.Last().Sgtin,
                     Direction = 0
                 };
-                
+
                 var paginatedCises =
                     await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination, gtins),
                         cancellationToken);
@@ -220,6 +220,21 @@ public sealed class MarkingService(
 
         foreach (var createSetRequest in createRequests)
         {
+            var setId = setsToCreate.FirstOrDefault(x => x.Gtin == createSetRequest.Gtin)?.Id;
+
+            var unitsOfSet = _dbContext.Units
+                .Where(x => x.UserId == userId && x.SetIds.Contains(setId.Value))
+                .Select(x => x.Gtin)
+                .Distinct()
+                .ToList();
+
+            if (setsCisesList.First(x => x.Gtin == "0" + createSetRequest.Gtin).Cises.Count < createSetRequest.Count)
+            {
+                _logger.LogError($"Не хватает кодов маркировки под набор gtin:{createSetRequest.Gtin}");
+                throw new Exception($"Не хватает кодов маркировки под набор gtin:{createSetRequest.Gtin}");
+                continue;
+            }
+            
             for (var i = 0; i < createSetRequest.Count; i++)
             {
                 var cisesOfSet = (setsCisesList
@@ -227,15 +242,7 @@ public sealed class MarkingService(
                         ?.Cises!)
                     .Select(x => x.Cis)
                     .ToList();
-
-                var setId = setsToCreate.FirstOrDefault(x => x.Gtin == createSetRequest.Gtin)?.Id;
-
-                var unitsOfSet = _dbContext.Units
-                    .Where(x => x.UserId == userId && x.SetIds.Contains(setId.Value))
-                    .Select(x => x.Gtin)
-                    .Distinct()
-                    .ToList();
-
+                
                 var cisesOfUnit = unitsCisesList
                     .Where(x => unitsOfSet.Contains(x.Gtin.Remove(0, 1)))
                     .ToList();
@@ -244,10 +251,9 @@ public sealed class MarkingService(
                 {
                     var unit = cisesOfUnit.First(x => x.Cises.Count < createSetRequest.Count);
                     _logger.LogError($"Не хватает кодов маркировки под gtin:{unit.Gtin}");
-                    break;
-                    throw new Exception($"Не хватает кодов маркировки под gtin:{unit.Gtin}");
+                    throw new Exception($"Не хватает кодов маркировки под товар gtin:{createSetRequest.Gtin}");
                 }
-
+                
                 var oneSet = new AggregationUnit()
                 {
                     UnitSerialNumber = cisesOfSet[i],

@@ -10,5 +10,6 @@ public class CreatedSetsDto
     public required int Count { get; set; }
     public string? Response { get; set; }
     
+    public string Date { get; set; }
     public CreateSetStatus Status { get; set; }
 }

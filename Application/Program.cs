@@ -12,8 +12,15 @@ public class Program
 
     public static IHostBuilder CreateHostBuilder(string[] args) =>
         Host.CreateDefaultBuilder(args)
-            .UseSerilog((context, loggerConfiguration) =>
-                loggerConfiguration.ReadFrom.Configuration(context.Configuration))
+            .UseSerilog((context, configuration) =>
+            {
+                configuration
+                    .MinimumLevel.Information()
+                    .WriteTo.Console()
+                    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+                    .MinimumLevel.Override("Serilog.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+                    .WriteTo.File("log-.txt", rollingInterval: RollingInterval.Day);
+            })
             .ConfigureWebHostDefaults(webBuilder =>
             {
                 webBuilder

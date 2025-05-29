@@ -8,9 +8,9 @@ public class EntityBase
     /// Идентификатор
     /// </summary>
     public int Id { get; set; }
-    
+
     /// <summary>
     /// Дата создания
     /// </summary>
-    public DateTime CreationDate { get; set; } = DateTime.UtcNow;
+    public DateTime CreationDate { get; set; } = DateTime.Now;
 }

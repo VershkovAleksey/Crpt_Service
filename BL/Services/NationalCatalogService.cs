@@ -25,8 +25,9 @@ public class NationalCatalogService(
 
     private readonly ILogger<NationalCatalogService>
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    
-    private readonly ICurrentUserService _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
+
+    private readonly ICurrentUserService _currentUserService =
+        currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
 
     private readonly CrptContext _crptContext = crptContext ?? throw new ArgumentNullException(nameof(crptContext));
 
@@ -38,12 +39,13 @@ public class NationalCatalogService(
     public async Task<List<SetOptionDto>> GetSetsAsync()
     {
         //TODO:Переделать на currentUserId
-        return _crptContext.Sets.Where(x => x.UserId == _currentUserService.CurrentUser.Id).Select(x => new SetOptionDto()
-        {
-            Id = x.Id,
-            SetName = x.SetName,
-            Gtin = x.Gtin
-        }).ToList();
+        return _crptContext.Sets.Where(x => x.UserId == _currentUserService.CurrentUser.Id).Select(x =>
+            new SetOptionDto()
+            {
+                Id = x.Id,
+                SetName = x.SetName,
+                Gtin = x.Gtin
+            }).ToList();
     }
 
     public async Task<bool> CreateSetsAsync(IEnumerable<SetOptionDto> options,
@@ -72,6 +74,7 @@ public class NationalCatalogService(
         _crptContext.CreateSetRequests
             .Where(x => x.UserId == userId)
             .ToList()
+            .OrderByDescending(x => x.Id)
             .Select(x => MapSetsToDto(x))
             .ToList();
 
@@ -85,6 +88,7 @@ public class NationalCatalogService(
             Count = setEntity.Count,
             Gtin = setEntity.Gtin,
             Id = setEntity.Id,
+            Date = setEntity.CreationDate.ToString("yyyy.MM.dd HH:mm:ss"),
         };
     }
 
