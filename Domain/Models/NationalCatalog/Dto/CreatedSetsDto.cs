@@ -11,5 +11,5 @@ public class CreatedSetsDto
     public string? Response { get; set; }
     
     public string Date { get; set; }
-    public CreateSetStatus Status { get; set; }
+    public string Status { get; set; }
 }

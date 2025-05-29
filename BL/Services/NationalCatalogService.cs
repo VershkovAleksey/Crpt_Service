@@ -4,6 +4,7 @@ using Database.Context;
 using Database.Entities.CreateSetRequest;
 using Database.Entities.Sets;
 using Database.Entities.Units;
+using Domain.Extensions;
 using Domain.Models.Crpt.Marking.Enums;
 using Domain.Models.NationalCatalog;
 using Domain.Models.NationalCatalog.Dto;
@@ -80,10 +81,11 @@ public class NationalCatalogService(
 
     private CreatedSetsDto MapSetsToDto(CreateSetRequestEntity setEntity)
     {
+        var setEntityStatus = (CreateSetStatus)setEntity.Status;
         return new CreatedSetsDto()
         {
             SetName = setEntity.SetName,
-            Status = (CreateSetStatus)setEntity.Status,
+            Status = setEntityStatus.GetDescription(),
             Response = setEntity.Response,
             Count = setEntity.Count,
             Gtin = setEntity.Gtin,
