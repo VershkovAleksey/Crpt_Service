@@ -6,7 +6,7 @@ namespace Abstractions.Services;
 
 public interface IMarkingService
 {
-    public Task<List<MarkingListDto>?> GetIdentificationCodesAsync(string token, IEnumerable<string> gtins,
+    public Task<List<MarkingListDto>> GetIdentificationCodesAsync(string token, IEnumerable<string> gtins,
         CancellationToken cancellationToken = default);
 
     public Task<CreateDocumentBodyRequest> CreateSetsAsync(string token, int userId,

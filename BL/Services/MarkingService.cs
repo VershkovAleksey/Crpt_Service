@@ -1,14 +1,13 @@
-using System.Collections;
 using System.Text;
 using Abstractions.Infrastructure.Http;
 using Abstractions.Services;
 using Database.Context;
 using Database.Entities.CreateSetRequest;
-using Database.Entities.Sets;
 using Domain.Models.Crpt.Marking.Dto;
 using Domain.Models.Crpt.Marking.Enums;
 using Domain.Models.Crpt.Marking.Request;
 using Domain.Models.Crpt.Marking.Response;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
@@ -18,253 +17,183 @@ public sealed class MarkingService(
     ILogger<MarkingService> logger,
     ICrptHttpClient crptHttpClient,
     CrptContext dbContext,
-    IAuthService authService,
     ICurrentUserService currentUserService) : IMarkingService
 {
     private readonly ILogger<MarkingService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly CrptContext _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+    private readonly ICurrentUserService _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
+    private readonly ICrptHttpClient _crptHttpClient = crptHttpClient ?? throw new ArgumentNullException(nameof(crptHttpClient));
 
-    private readonly ICurrentUserService _currentUserService =
-        currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
-
-    private readonly ICrptHttpClient _crptHttpClient =
-        crptHttpClient ?? throw new ArgumentNullException(nameof(crptHttpClient));
-
-    private readonly IAuthService _authService = authService ?? throw new ArgumentNullException(nameof(authService));
-
-    public async Task<List<MarkingListDto>?> GetIdentificationCodesAsync(string token, IEnumerable<string> gtins,
+    public async Task<List<MarkingListDto>> GetIdentificationCodesAsync(
+        string token,
+        IEnumerable<string> gtins,
         CancellationToken cancellationToken = default)
     {
+        // Валидация входных параметров
+        if (string.IsNullOrEmpty(token))
+        {
+            _logger.LogWarning("Токен пустой или null в {MethodName}", nameof(GetIdentificationCodesAsync));
+            throw new ArgumentNullException(nameof(token));
+        }
+        if (gtins == null || !gtins.Any())
+        {
+            _logger.LogInformation("Передан пустой список GTIN в {MethodName}", nameof(GetIdentificationCodesAsync));
+            return new List<MarkingListDto>();
+        }
+
         var cises = await GetCisesAsync(token, gtins, cancellationToken);
+        
+        if (cises == null || !cises.Any())
+        {
+            _logger.LogInformation("Получен пустой результат от GetCisesAsync для GTIN: {Gtins}", string.Join(", ", gtins));
+            return new List<MarkingListDto>();
+        }
 
-        var result = new List<MarkingListDto>();
-
-        result.AddRange(GetSets(cises));
-
-        result.AddRange(GetUnits(cises));
+        // Объединяем результаты для наборов и товаров
+        var result = GetMarkingLists(cises, new[] { "BUNDLE", "GROUP", "SET" }, "SET")
+            .Concat(GetMarkingLists(cises, new[] { "UNIT" }, "UNIT"))
+            .ToList();
 
         return result;
     }
 
-    private IEnumerable<MarkingListDto> GetSets(List<GetCisesResult> cises)
+    public async Task<List<GetCisesResult>> GetCisesAsync(string token, IEnumerable<string> gtins, CancellationToken cancellationToken = default)
     {
-        var sets = cises.Where(x =>
-            x.GeneralPackageType is "BUNDLE" or "GROUP" or "SET").ToList();
-
-        if (sets.Count == 0)
+        // Валидация входных параметров
+        if (string.IsNullOrEmpty(token))
         {
-            _logger.LogError("{ClassName}.{MethodName}: No sets found", nameof(MarkingService),
-                nameof(GetIdentificationCodesAsync));
+            _logger.LogWarning("Токен пустой или null в {MethodName}", nameof(GetCisesAsync));
+            throw new ArgumentNullException(nameof(token));
+        }
+        
+        if (gtins == null || !gtins.Any())
+        {
+            _logger.LogInformation("Передан пустой список GTIN в {MethodName}", nameof(GetCisesAsync));
+            return new List<GetCisesResult>();
         }
 
-        var setGtins = sets.Select(x => x.Gtin).Distinct();
+        var allCises = new List<GetCisesResult>();
+        
+        var request = MapRequest(gtins);
+        
+        var cisesPage = await _crptHttpClient.GetCisesAsync(token, request, cancellationToken);
 
-        var sortedSetsByGtinsList = setGtins.Select(gtin => sets.Where(x => x.Gtin == gtin).ToList()).ToList();
-
-        return sortedSetsByGtinsList.Select(setList => new MarkingListDto()
+        if (cisesPage?.Result == null)
         {
-            Cises = setList, CisesType = setList.First().GeneralPackageType, Gtin = setList.First().Gtin!,
-        });
-    }
-
-    private IEnumerable<MarkingListDto> GetUnits(List<GetCisesResult> cises)
-    {
-        var units = cises.Where(x => x.GeneralPackageType == "UNIT").ToList();
-
-        if (units.Count == 0)
-        {
-            _logger.LogError("{ClassName}.{MethodName}: No units found", nameof(MarkingService),
-                nameof(GetIdentificationCodesAsync));
-        }
-
-        var gtins = units.Select(x => x.Gtin).Distinct();
-
-        var sortedUnitsByGtinsList = gtins.Select(gtin => units.Where(x => x.Gtin == gtin).ToList()).ToList();
-
-        return sortedUnitsByGtinsList.Select(unitsList => new MarkingListDto()
-            { Cises = unitsList, CisesType = unitsList.First().GeneralPackageType, Gtin = unitsList.First().Gtin! });
-    }
-
-    private async Task<List<GetCisesResult>> GetCisesAsync(string token, IEnumerable<string> gtins,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var cisesFirstPage = await _crptHttpClient.GetCisesAsync(token, MapRequest(gtins), cancellationToken);
-
-
-            if (cisesFirstPage is null || cisesFirstPage.Result.Length == 0)
-            {
-                return null;
-            }
-
-            while (!cisesFirstPage.IsLastPage)
-            {
-                var pagination = new Pagination()
-                {
-                    LastEmissionDate = cisesFirstPage.Result.Last().EmissionDate,
-                    Sgtin = cisesFirstPage.Result.Last().Sgtin,
-                    Direction = 0
-                };
-
-                var paginatedCises =
-                    await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination, gtins),
-                        cancellationToken);
-
-                cisesFirstPage.Result = cisesFirstPage.Result.Concat(paginatedCises.Result).ToArray();
-                cisesFirstPage.IsLastPage = paginatedCises.IsLastPage;
-            }
-
-            List<GetCisesResult> allCises = cisesFirstPage.Result.Where(x => x.Status == "APPLIED").ToList();
-
+            _logger.LogInformation("Получен пустой результат от API для GTIN: {Gtins}", string.Join(", ", gtins));
             return allCises;
         }
-        catch (Exception e)
+
+        // Фильтрация и добавление результатов первой страницы
+        allCises.AddRange(cisesPage.Result.Where(x => x.Status == "APPLIED"));
+
+        // Пагинация
+        while (!cisesPage.IsLastPage)
         {
-            _logger.LogError(e, "{ClassName}.{MethodName}: {Message}", nameof(MarkingService), nameof(GetCisesAsync),
-                e.Message);
-            throw;
+            var lastResult = cisesPage.Result[^1]; // Используем индексатор для последнего элемента
+            
+            var pagination = new Pagination
+            {
+                LastEmissionDate = lastResult.EmissionDate,
+                Sgtin = lastResult.Sgtin,
+                Direction = 0
+            };
+
+            cisesPage = await _crptHttpClient.GetCisesAsync(token, MapPaginationRequest(pagination, gtins), cancellationToken);
+            
+            if (cisesPage?.Result != null)
+            {
+                allCises.AddRange(cisesPage.Result.Where(x => x.Status == "APPLIED"));
+            }
         }
-    }
 
-    private bool FindUnits(IEnumerable<int> unitSetIds, IEnumerable<int> setIds)
-    {
-        return setIds.Any(unitSetIds.Contains);
+        return allCises;
     }
-
+    
     public async Task<CreateDocumentBodyRequest> CreateSetsAsync(string token, int userId,
         CancellationToken cancellationToken = default)
     {
-        try
+        // 1. Получение уникальных GTIN из CreateSetRequests
+        var currentUserId = _currentUserService.CurrentUser.Id;
+
+        var setGtins = await _dbContext.CreateSetRequests
+            .Where(x => x.UserId == currentUserId && x.Status == (int)CreateSetStatus.Proccessed)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (!setGtins.Any())
         {
-            var createRequests = _dbContext.CreateSetRequests
-                .Where(x => x.UserId == _currentUserService.CurrentUser.Id &&
-                            x.Status == (int)CreateSetStatus.Proccessed)
-                .ToList();
-
-            var setGtinsToCreate = createRequests
-                .Select(x => x.Gtin)
-                .Distinct()
-                .ToList();
-
-            var setsToCreate = _dbContext.Sets
-                .Where(x => setGtinsToCreate.Contains(x.Gtin))
-                .ToList();
-
-            var unitGtinsToCreate = _dbContext.Units
-                .Where(x => x.UserId == _currentUserService.CurrentUser.Id)
-                .ToList()
-                .Where(x => FindUnits(x.SetIds, setsToCreate.Select(x => x.Id)))
-                .Select(x => x.Gtin)
-                .Distinct()
-                .ToList();
-
-            var gtinsToCreate = setGtinsToCreate.Concat(unitGtinsToCreate).ToList();
-
-            var cises = await GetIdentificationCodesAsync(token, gtinsToCreate, cancellationToken);
-
-            //_logger.LogInformation("Cises: {cises}", JsonConvert.SerializeObject(cises));
-
-            _logger.LogInformation("Gtins of sets to create: {gtins}", JsonConvert.SerializeObject(setGtinsToCreate));
-
-
-            var setsCisesList = cises
-                .Where(x => x.CisesType == "SET" && setGtinsToCreate.Contains(x.Gtin.Remove(0, 1)))
-                .ToList();
-
-            if (setsCisesList.Count == 0)
-            {
-                throw new Exception(
-                    $"Не найдены коды маркировки для наборов:{JsonConvert.SerializeObject(setGtinsToCreate)}");
-            }
-
-            var unitsCisesList = cises
-                .Where(x => x.CisesType == "UNIT" && unitGtinsToCreate.Contains(x.Gtin.Remove(0, 1)))
-                .ToList();
-
-            if (unitsCisesList.Count == 0)
-            {
-                throw new Exception(
-                    $"Не найдены коды маркировки для товаров:{JsonConvert.SerializeObject(unitGtinsToCreate)}");
-            }
-
-            var aggregationUnits = GetAggregationUnits(_currentUserService.CurrentUser.Id, createRequests,
-                setsCisesList, setsToCreate,
-                unitsCisesList);
-
-
-            var requestBody = new CreateSetsRequest()
-            {
-                AggregationUnits = aggregationUnits,
-                ParticipantId = _currentUserService.CurrentUser.Inn
-            };
-
-            var requestSerialized = JsonConvert.SerializeObject(requestBody);
-
-            return new CreateDocumentBodyRequest()
-            {
-                ProductDocument = requestSerialized,
-                Signature = string.Empty
-            };
-        }
-        catch (Exception ex)
-        {
-            throw;
-        }
-    }
-
-    private List<AggregationUnit> GetAggregationUnits(int userId, List<CreateSetRequestEntity> createRequests,
-        List<MarkingListDto> setsCisesList, List<SetEntity> setsToCreate, List<MarkingListDto> unitsCisesList)
-    {
-        var aggregationUnits = new List<AggregationUnit>();
-
-        foreach (var createSetRequest in createRequests)
-        {
-            var setId = setsToCreate.FirstOrDefault(x => x.Gtin == createSetRequest.Gtin)?.Id;
-
-            var unitsOfSet = _dbContext.Units
-                .Where(x => x.UserId == userId && x.SetIds.Contains(setId.Value))
-                .Select(x => x.Gtin)
-                .Distinct()
-                .ToList();
-
-            if (setsCisesList.First(x => x.Gtin == "0" + createSetRequest.Gtin).Cises.Count < createSetRequest.Count)
-            {
-                _logger.LogError($"Не хватает кодов маркировки под набор gtin:{createSetRequest.Gtin}");
-                throw new Exception($"Не хватает кодов маркировки под набор gtin:{createSetRequest.Gtin}");
-                continue;
-            }
-            
-            for (var i = 0; i < createSetRequest.Count; i++)
-            {
-                var cisesOfSet = (setsCisesList
-                        .FirstOrDefault(x => x.Gtin == "0" + createSetRequest.Gtin)
-                        ?.Cises!)
-                    .Select(x => x.Cis)
-                    .ToList();
-                
-                var cisesOfUnit = unitsCisesList
-                    .Where(x => unitsOfSet.Contains(x.Gtin.Remove(0, 1)))
-                    .ToList();
-
-                if (cisesOfUnit.Any(x => x.Cises.Count < createSetRequest.Count))
-                {
-                    var unit = cisesOfUnit.First(x => x.Cises.Count < createSetRequest.Count);
-                    _logger.LogError($"Не хватает кодов маркировки под gtin:{unit.Gtin}");
-                    throw new Exception($"Не хватает кодов маркировки под товар gtin:{createSetRequest.Gtin}");
-                }
-                
-                var oneSet = new AggregationUnit()
-                {
-                    UnitSerialNumber = cisesOfSet[i],
-                    Sntins = cisesOfUnit.Select(x => x.Cises[i].Cis).ToArray(),
-                };
-
-                aggregationUnits.Add(oneSet);
-            }
+            _logger.LogInformation("Нет запросов на создание наборов для пользователя {UserId}", currentUserId);
+            throw new InvalidOperationException("Нет запросов на создание наборов.");
         }
 
-        return aggregationUnits;
+        // 2. Получение Sets
+        var setGtinsSet = setGtins
+            .Select(x => x.Gtin)
+            .ToHashSet();
+
+        var setsToCreate = await _dbContext.Sets
+            .Where(x => setGtinsSet.Contains(x.Gtin))
+            .Select(x => new SetToCreateDto()
+            {
+                Gtin = x.Gtin,
+                Id = x.Id
+            })
+            .ToListAsync(cancellationToken);
+
+        var setIds = setsToCreate.Select(x => x.Id).ToHashSet();
+
+        // 3. Получение GTIN из Units с фильтрацией по SetIds в базе
+        var unitGtins = await _dbContext.Units
+            .Where(x => x.UserId == currentUserId && x.SetIds.Any(id => setIds.Contains(id)))
+            .Select(x => x.Gtin)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var gtinsToCreate = setGtinsSet.Union(unitGtins).ToList();
+
+        // 4. Получение кодов идентификации
+        var cises = await GetIdentificationCodesAsync(token, gtinsToCreate, cancellationToken);
+
+        // 5. Фильтрация кодов
+        var setsCisesList = cises
+            .Where(x => x.CisesType == "SET" && setGtinsSet.Contains(x.Gtin.Remove(0, 1)))
+            .ToList();
+
+        if (!setsCisesList.Any())
+        {
+            _logger.LogWarning("Не найдены коды маркировки для наборов: {Gtins}", string.Join(", ", setGtins));
+            throw new InvalidOperationException("Не найдены коды маркировки для наборов.");
+        }
+
+        var unitsCisesList = cises
+            .Where(x => x.CisesType == "UNIT" && unitGtins.Contains(x.Gtin.Remove(0, 1)))
+            .ToList();
+
+        if (!unitsCisesList.Any())
+        {
+            _logger.LogWarning("Не найдены коды маркировки для товаров: {Gtins}", string.Join(", ", unitGtins));
+            throw new InvalidOperationException("Не найдены коды маркировки для товаров.");
+        }
+
+        // 6. Логирование после проверок
+        _logger.LogInformation("GTIN наборов для создания: {Gtins}", string.Join(", ", setGtins.Select(x => x.Gtin)));
+
+        // 7. Формирование агрегации
+        var aggregationUnits = await GetAggregationUnitsAsync(currentUserId, setGtins, setsCisesList, setsToCreate, unitsCisesList, cancellationToken);
+
+        // 8. Формирование запроса
+        var requestBody = new CreateSetsRequest
+        {
+            AggregationUnits = aggregationUnits,
+            ParticipantId = _currentUserService.CurrentUser.Inn
+        };
+
+        return new CreateDocumentBodyRequest
+        {
+            ProductDocument = JsonConvert.SerializeObject(requestBody),
+            Signature = string.Empty
+        };
     }
 
     public async Task SignDataAsync(string token, int userId, CreateDocumentBodyRequest createDocumentBodyRequest,
@@ -293,32 +222,202 @@ public sealed class MarkingService(
         }
     }
 
+    private async Task<string?> CheckCisesAsync(
+        List<CreateSetRequestEntity> createRequests,
+        List<MarkingListDto> setsCisesList,
+        List<SetToCreateDto> setsToCreate,
+        List<MarkingListDto> unitsCisesList,
+        int userId,
+        CancellationToken cancellationToken = default)
+    {
+        // Создаём словари для быстрого доступа
+        var setsCisesDict = setsCisesList.ToDictionary(x => x.Gtin, x => x.Cises.Count);
+        var setsToCreateDict = setsToCreate.ToDictionary(x => x.Gtin, x => x.Id);
+
+        // Загружаем Units один раз
+        var unitsBySetId = await _dbContext.Units
+            .Where(x => x.UserId == userId)
+            .Select(x => new { x.Gtin, x.SetIds })
+            .ToListAsync(cancellationToken);
+
+        var errorMessages = new StringBuilder();
+
+        foreach (var request in createRequests)
+        {
+            // Проверка кодов для наборов
+            string setGtinKey = "0" + request.Gtin;
+            if (!setsCisesDict.TryGetValue(setGtinKey, out int cisesCount) || cisesCount < request.Count)
+            {
+                int missingCount = request.Count - (setsCisesDict.TryGetValue(setGtinKey, out cisesCount) ? cisesCount : 0);
+                errorMessages.AppendLine($"Не хватает {missingCount} кодов маркировки для набора GTIN: {request.Gtin}");
+            }
+
+            // Получение setId
+            if (!setsToCreateDict.TryGetValue(request.Gtin, out int setId))
+            {
+                errorMessages.AppendLine($"Не найден набор с GTIN: {request.Gtin}");
+                continue;
+            }
+
+            // Получение GTIN товаров для набора
+            var unitsOfSet = unitsBySetId
+                .Where(x => x.SetIds.Contains(setId))
+                .Select(x => x.Gtin)
+                .Distinct()
+                .ToList();
+
+            // Проверка кодов для товаров
+            var cisesOfUnit = unitsCisesList
+                .Where(x => unitsOfSet.Contains(x.Gtin.Remove(0, 1)))
+                .ToList();
+
+            foreach (var unit in cisesOfUnit)
+            {
+                if (unit.Cises.Count < request.Count)
+                {
+                    errorMessages.AppendLine(
+                        $"Не хватает {request.Count - unit.Cises.Count} кодов маркировки для товара GTIN: {unit.Gtin.Remove(0, 1)}");
+                }
+            }
+        }
+
+        return errorMessages.Length > 0 ? errorMessages.ToString() : null;
+    }
+
+    private async Task<List<AggregationUnit>> GetAggregationUnitsAsync(
+        int userId,
+        List<CreateSetRequestEntity> createRequests,
+        List<MarkingListDto> setsCisesList,
+        List<SetToCreateDto> setsToCreate,
+        List<MarkingListDto> unitsCisesList,
+        CancellationToken cancellationToken = default)
+    {
+        // Проверка наличия кодов
+        string? errorMessage = await CheckCisesAsync(createRequests, setsCisesList, setsToCreate, unitsCisesList,
+            userId, cancellationToken);
+        
+        if (errorMessage != null)
+        {
+            _logger.LogError("Ошибка при создании AggregationUnits: {ErrorMessage}", errorMessage);
+            throw new InvalidOperationException(errorMessage);
+        }
+
+        // Создаём словари для быстрого доступа
+        var setsCisesDict = setsCisesList.ToDictionary(x => x.Gtin, x => x.Cises.Select(c => c.Cis).ToList());
+        var setsToCreateDict = setsToCreate.ToDictionary(x => x.Gtin, x => x.Id);
+
+        // Загружаем Units один раз
+        var unitsBySetId = await _dbContext.Units
+            .Where(x => x.UserId == userId)
+            .Select(x => new { x.Gtin, x.SetIds })
+            .ToListAsync(cancellationToken);
+
+        var aggregationUnits = new List<AggregationUnit>();
+
+        foreach (var request in createRequests)
+        {
+            // Получение setId
+            if (!setsToCreateDict.TryGetValue(request.Gtin, out int setId))
+            {
+                _logger.LogWarning("Не найден набор с GTIN: {Gtin}", request.Gtin);
+                continue;
+            }
+
+            // Получение GTIN товаров для набора
+            var unitsOfSet = unitsBySetId
+                .Where(x => x.SetIds.Contains(setId))
+                .Select(x => x.Gtin)
+                .Distinct()
+                .ToList();
+
+            // Получение кодов для товаров
+            var cisesOfUnit = unitsCisesList
+                .Where(x => unitsOfSet.Contains(x.Gtin.Remove(0, 1)))
+                .ToList();
+
+            // Получение кодов для набора
+            string setGtinKey = "0" + request.Gtin;
+            if (!setsCisesDict.TryGetValue(setGtinKey, out var cisesOfSet))
+            {
+                _logger.LogWarning("Не найдены коды для набора GTIN: {Gtin}", request.Gtin);
+                continue;
+            }
+
+            // Создание AggregationUnit
+            for (int i = 0; i < request.Count && i < cisesOfSet.Count; i++)
+            {
+                var oneSet = new AggregationUnit
+                {
+                    UnitSerialNumber = cisesOfSet[i],
+                    Sntins = cisesOfUnit
+                        .Where(x => i < x.Cises.Count)
+                        .Select(x => x.Cises[i].Cis)
+                        .ToArray()
+                };
+                aggregationUnits.Add(oneSet);
+            }
+        }
+
+        return aggregationUnits;
+    }
+    
+    private IEnumerable<MarkingListDto> GetMarkingLists(
+        List<GetCisesResult> cises,
+        string[] packageTypes,
+        string cisesType)
+    {
+        var filteredCises = cises
+            .Where(x => packageTypes.Contains(x.GeneralPackageType))
+            .GroupBy(x => x.Gtin)
+            .Select(g => new
+            {
+                Cises = g.ToList(),
+                Gtin = g.Key
+            })
+            .ToList();
+
+        if (!filteredCises.Any())
+        {
+            _logger.LogWarning("Не найдены элементы с типом {CisesType} в {MethodName}", cisesType, nameof(GetMarkingLists));
+        }
+
+        return filteredCises.Select(group => new MarkingListDto
+        {
+            Cises = group.Cises,
+            CisesType = cisesType,
+            Gtin = group.Gtin
+        });
+    }
+
     private GetCisesRequest MapRequest(IEnumerable<string> gtins)
     {
-        var gtin = gtins.Select(x => "0" + x);
-        var request = new GetCisesRequest
+        return new GetCisesRequest
         {
-            Filter = new CisesFilter()
+            Filter = new CisesFilter
             {
-                Gtins = gtin.ToArray(),
+                Gtins = MapGtins(gtins)
             }
         };
-
-        return request;
     }
 
     private GetCisesRequest MapPaginationRequest(Pagination pagination, IEnumerable<string> gtins)
     {
-        var gtin = gtins.Select(x => "0" + x);
-        var request = new GetCisesRequest
+        return new GetCisesRequest
         {
-            Filter = new CisesFilter()
+            Filter = new CisesFilter
             {
-                Gtins = gtin.ToArray(),
+                Gtins = MapGtins(gtins)
             },
             Pagination = pagination
         };
+    }
 
-        return request;
+    private string[] MapGtins(IEnumerable<string> gtins)
+    {
+        if (gtins == null)
+            throw new ArgumentNullException(nameof(gtins));
+
+        return gtins.Select(x => "0" + x ?? throw new ArgumentNullException(nameof(gtins), "GTIN не может быть null"))
+            .ToArray();
     }
 }
