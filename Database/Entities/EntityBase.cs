@@ -12,5 +12,5 @@ public class EntityBase
     /// <summary>
     /// Дата создания
     /// </summary>
-    public DateTime CreationDate { get; set; } = DateTime.Now;
+    public DateTime CreationDate { get; set; } = DateTime.UtcNow.AddHours(3);
 }
