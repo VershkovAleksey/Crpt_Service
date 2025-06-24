@@ -79,4 +79,19 @@ public class NationalCatalogController(
             return StatusCode(500, e.Message);
         }
     }
+
+    [HttpPost]
+    [Route("delete-request")]
+    public async Task<IActionResult> DeleteRequestAsync([FromQuery, Required] int id)
+    {
+        try
+        {
+            await _nationalCatalogService.DeleteItemAsync(id);
+            return Ok();
+        }
+        catch (Exception e)
+        {
+            return StatusCode(500, e.Message);
+        }
+    }
 }

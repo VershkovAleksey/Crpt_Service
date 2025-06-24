@@ -14,4 +14,6 @@ public interface INationalCatalogService
     Task<bool> CreateSetsAsync(IEnumerable<SetOptionDto> options, CancellationToken cancellationToken = default);
 
     Task<List<CreatedSetsDto>> GetSetsByUserIdAsync(int userId);
+
+    Task DeleteItemAsync(int itemId, CancellationToken cancellationToken = default);
 }

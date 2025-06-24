@@ -8,4 +8,6 @@ public class RegisterDto
     public string? LastName { get; set; }
     public string? PhoneNumber { get; set; }
     public string? ApiKey { get; set; }
+    
+    public string? Inn { get; set; }
 }

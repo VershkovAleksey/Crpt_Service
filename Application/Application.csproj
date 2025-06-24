@@ -36,4 +36,8 @@
       <ProjectReference Include="..\Domain\Domain.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <_ContentIncludedByDefault Remove="Serilogs\s.json" />
+    </ItemGroup>
+
 </Project>

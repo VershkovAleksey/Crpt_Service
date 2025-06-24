@@ -128,6 +128,18 @@ public class NationalCatalogService(
         await _crptContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task DeleteItemAsync(int itemId, CancellationToken cancellationToken = default)
+    {
+        var item = await _crptContext.CreateSetRequests.FirstOrDefaultAsync(x => x.Id == itemId, cancellationToken);
+
+        if (item is not null)
+        {
+            _crptContext.CreateSetRequests.Remove(item);
+        }
+
+        await _crptContext.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task<List<ProductDetailInfoResponse>> GetProductDetailInfoListAsync(
         GetProductListResponse productListResponse,
         CancellationToken cancellationToken = default)

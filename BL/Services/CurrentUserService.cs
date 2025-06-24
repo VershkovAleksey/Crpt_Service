@@ -35,6 +35,7 @@ public class CurrentUserService(
             Role = "User",
             PhoneNumber = registerDto.PhoneNumber,
             NkApiKey = registerDto.ApiKey ?? throw new ArgumentNullException("Api key is required"),
+            Inn = registerDto.Inn ?? throw new ArgumentNullException("Inn is required"),
         };
 
         await _dbContext.Users.AddAsync(newUser);
