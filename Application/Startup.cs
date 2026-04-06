@@ -51,7 +51,7 @@ public class Startup
         services.AddCors(options =>
         {
             options.AddPolicy("VuePolicy",
-                builder => builder.WithOrigins("http://130.193.52.139", "http://130.193.52.139:80")
+                builder => builder.WithOrigins("http://213.165.218.221", "http://213.165.218.221:80")
                     .AllowAnyMethod()
                     .AllowAnyHeader()
                     .AllowCredentials());
