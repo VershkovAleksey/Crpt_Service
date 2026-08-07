@@ -12,10 +12,12 @@ public static class ServiceCollectionExtension
     {
         services.AddScoped<ICrptHttpClient, CrptHttpClient>();
         services.AddScoped<INkHttpClient, NkHttpClient>();
+        services.AddScoped<WbClient>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IMarkingService, MarkingService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<INationalCatalogService, NationalCatalogService>();
+        services.AddScoped<IWbService, WbService>();
         return services;
     }
     

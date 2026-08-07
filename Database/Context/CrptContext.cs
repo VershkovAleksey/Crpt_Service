@@ -16,7 +16,7 @@ public sealed class CrptContext : DbContext
 
     public CrptContext(DbContextOptions<CrptContext> options) : base(options)
     {
-        Database.Migrate();
+        //Database.Migrate();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -51,7 +51,7 @@ public class Startup
         services.AddCors(options =>
         {
             options.AddPolicy("VuePolicy",
-                builder => builder.WithOrigins("http://213.165.218.221", "http://213.165.218.221:80")
+                builder => builder.WithOrigins("http://213.165.218.221", "http://213.165.218.221:80", "http://localhost:8081")
                     .AllowAnyMethod()
                     .AllowAnyHeader()
                     .AllowCredentials());
@@ -133,10 +133,10 @@ public class Startup
         if (env.IsDevelopment())
         {
             app.UseDeveloperExceptionPage();
-            // app.UseSwaggerUI(options => // UseSwaggerUI is called only in Development.
-            // {
-            //     options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
-            // });
+            app.UseSwaggerUI(options => // UseSwaggerUI is called only in Development.
+            {
+                options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
+            });
         }
         else
         {
