@@ -24,18 +24,7 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
             CardList cardList = new();
             GetCardsRequest getCardsRequest = new();
 
-            // Получаем первый пак карточек лимит 100, но бывает приходит по 10. Запрашиваем пока total не будет меньше лимита
-            do
-            {
-                var res = await _client.GetCardListAsync(getCardsRequest);
-
-                cardList.Cursor = res.Cursor;
-                cardList.Cards.AddRange(res.Cards);
-
-                getCardsRequest.Settings.Cursor.NmID = res.Cursor.NmID;
-                getCardsRequest.Settings.Cursor.UpdatedAt = res.Cursor.UpdatedAt;
-                //Дальше получаем пока не выжрем лимит
-            } while (cardList.Cursor.Total >= 100);
+            await GetCardListAsync(getCardsRequest, cardList);
 
             // Получаем список новых сборочных заданий
             var assemblies = await _client.GetAllAssemblyTasks();
@@ -45,61 +34,8 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
 
             //Сортируем сортированные сборочные заданий по размерам и сортировочным центрам
             var sortedOrders = GetSortedOrdersByChrtIdAndSortingCenters(assemblies, sizes);
-            var supplyCount = 0;
-            var successOrderToSuppliesCount = 0;
 
-            //Формируем поставки исходя из сортированных сборочных заданий (заказов)
-            foreach (var orders in sortedOrders)
-            {
-                try
-                {
-                    //Проверяем не выжрали ли лимит по запросам (300 в минуту). Если выжрали, ждем 1 минуту и скидываем счетчик
-                    if (successOrderToSuppliesCount + orders.Count >= 300)
-                    {
-                        _logger.LogInformation("Достигнут лимит кол-ва запросов ждем 1 минуту");
-                        await Task.Delay(TimeSpan.FromMinutes(1));
-                        successOrderToSuppliesCount = 0;
-                    }
-
-                    //Получаем название поставки. Фомируется из артикула вб и размера
-                    var supplyName = GetSupplyName(cardList, (int)orders.First().ChrtId);
-                    
-                    //Создаем новую поставку
-                    var supplyId = await _client.CreateNewSupply(supplyName);
-
-                    var request = new AddOrdersToSupplyRequest()
-                    {
-                        Orders = orders.Select(x => x.Id).ToList()
-                    };
-
-                    //Добавляем заказы в поставку
-                    var isSuccess = await _client.AddOrdersToSupplyAsync(supplyId, request);
-
-                    //Между каждым запросом ждем 200мс (ограничение вб апи)
-                    await Task.Delay(200);
-
-                    if (!isSuccess)
-                    {
-                        _logger.LogWarning(
-                            "{service}.{method} problem while adding order {orderId} to supply {supplyId}",
-                            nameof(WbService), nameof(IWbService.CreateDailySupplies),
-                            JsonConvert.SerializeObject(request), supplyId);
-                    }
-
-                    successOrderToSuppliesCount += request.Orders.Count;
-
-                    supplyCount++;
-                    _logger.LogInformation("Успешно сформировано {count} сборочных заданий в поставку {name}",
-                        request.Orders.Count, supplyId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogInformation("{service}.{method} Error while creating supply: {message}",
-                        nameof(WbService), nameof(IWbService.CreateDailySupplies), ex.Message);
-
-                    continue;
-                }
-            }
+            var supplyCount = await ProcessOrdersAsync(sortedOrders, cardList);
 
             return supplyCount;
         }
@@ -109,6 +45,81 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
                 nameof(WbService), nameof(IWbService.CreateDailySupplies), ex.Message);
             throw;
         }
+    }
+
+    private async Task<int> ProcessOrdersAsync(List<List<Order>> sortedOrders, CardList cardList)
+    {
+        var supplyCount = 0;
+        var successOrderToSuppliesCount = 0;
+
+        //Формируем поставки исходя из сортированных сборочных заданий (заказов)
+        foreach (var orders in sortedOrders)
+        {
+            try
+            {
+                //Проверяем не выжрали ли лимит по запросам (300 в минуту). Если выжрали, ждем 1 минуту и скидываем счетчик
+                if (successOrderToSuppliesCount + orders.Count >= 300)
+                {
+                    _logger.LogInformation("Достигнут лимит кол-ва запросов ждем 1 минуту");
+                    await Task.Delay(TimeSpan.FromMinutes(1));
+                    successOrderToSuppliesCount = 0;
+                }
+
+                //Получаем название поставки. Фомируется из артикула вб и размера
+                var supplyName = GetSupplyName(cardList, (int)orders.First().ChrtId);
+
+                //Создаем новую поставку
+                var supplyId = await _client.CreateNewSupply(supplyName);
+
+                var request = new AddOrdersToSupplyRequest()
+                {
+                    Orders = orders.Select(x => x.Id).ToList()
+                };
+
+                //Добавляем заказы в поставку
+                var isSuccess = await _client.AddOrdersToSupplyAsync(supplyId, request);
+
+                //Между каждым запросом ждем 200мс (ограничение вб апи)
+                await Task.Delay(200);
+
+                if (!isSuccess)
+                {
+                    _logger.LogWarning(
+                        "{service}.{method} problem while adding order {orderId} to supply {supplyId}",
+                        nameof(WbService), nameof(IWbService.CreateDailySupplies),
+                        JsonConvert.SerializeObject(request), supplyId);
+                }
+
+                successOrderToSuppliesCount += request.Orders.Count;
+
+                supplyCount++;
+                _logger.LogInformation("Успешно сформировано {count} сборочных заданий в поставку {name}",
+                    request.Orders.Count, supplyId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogInformation("{service}.{method} Error while creating supply: {message}",
+                    nameof(WbService), nameof(IWbService.CreateDailySupplies), ex.Message);
+            }
+        }
+
+        return supplyCount;
+    }
+
+    private async Task GetCardListAsync(GetCardsRequest getCardsRequest, CardList cardList)
+    {
+        // Получаем первый пак карточек лимит 100, но бывает приходит по 10. Запрашиваем пока total не будет меньше лимита
+        do
+        {
+            var res = await _client.GetCardListAsync(getCardsRequest);
+
+            cardList.Cursor = res.Cursor;
+            cardList.Cards.AddRange(res.Cards);
+
+            getCardsRequest.Settings.Cursor.NmID = res.Cursor.NmID;
+            getCardsRequest.Settings.Cursor.UpdatedAt = res.Cursor.UpdatedAt;
+            //Дальше получаем пока не выжрем лимит
+        } while (cardList.Cursor.Total >= 100);
     }
 
     private List<int> GetSizeList(List<Order> orders)
