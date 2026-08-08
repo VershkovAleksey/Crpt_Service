@@ -4,6 +4,8 @@ using Domain.Models.Fbs.Requests;
 using Flurl;
 using Flurl.Http;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using System.Net;
 using WbManageBot.Models;
 
 namespace BL.Infrastructure.Http;
@@ -96,29 +98,37 @@ public class WbClient
         }
     }
 
-    public async Task<bool> AddOrderToSupplyAsync(string supplyId, long orderId)
+    public async Task<bool> AddOrdersToSupplyAsync(string supplyId, AddOrdersToSupplyRequest request)
     {
         try
         {
-            var response = await new Url(_marketplaceApiUrl).AppendPathSegment($"/api/v3/supplies/{supplyId}/orders/{orderId}")
-                                             .WithOAuthBearerToken(_token).PatchAsync();
+            var response = await new Url(_marketplaceApiUrl).AppendPathSegment($"api/marketplace/v3/supplies/{supplyId}/orders")
+                                             .WithOAuthBearerToken(_token).PatchJsonAsync(request);
             if (response.StatusCode == 204)
             {
-                _logger.LogInformation("Сборочное задание {orderId} успешно добавлено в поставку {supplyId}", orderId, supplyId);
+                _logger.LogInformation("Сборочное задания {orderId} успешно добавлено в поставку {supplyId}", JsonConvert.SerializeObject(request), supplyId);
                 return true;
             }
             return false;
         }
         catch (FlurlHttpException ex)
         {
+            string error = ex.Message;
+
+            if(ex.StatusCode == (int)HttpStatusCode.Conflict)
+            {
+                var resp = await ex.Call.Response.GetStringAsync();
+                error = error + resp;
+            }
+
             _logger.LogError(ex, "{service}.{method} Error while adding order to supply : {message}",
-                nameof(WbClient), nameof(AddOrderToSupplyAsync), ex.Message);
+                nameof(WbClient), nameof(AddOrdersToSupplyAsync), error);
             return false;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "{service}.{method} Error while adding order to supply : {message}",
-                nameof(WbClient), nameof(AddOrderToSupplyAsync), ex.Message);
+                nameof(WbClient), nameof(AddOrdersToSupplyAsync), ex.Message);
             throw;
         }
     }

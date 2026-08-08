@@ -14,14 +14,26 @@ namespace Domain.Models.Fbs.Models
 
     public class Cursor
     {
-        [JsonProperty("updatedAt")]
-        public string UpdatedAt { get; set; }
-
         [JsonProperty("nmID")]
         public int NmID { get; set; }
 
         [JsonProperty("total")]
         public int Total { get; set; }
+
+        [JsonProperty("updatedAt")]
+        public string UpdatedAt { get; set; }
+    }
+
+    public class Characteristics
+    {
+        [JsonProperty("id")]
+        public int Id { get; set; }
+
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        [JsonProperty("value")]
+        public List<string> Value { get; set; }
     }
 
     public class Sizes

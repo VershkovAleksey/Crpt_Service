@@ -4,6 +4,7 @@ using Domain.Models.Fbs;
 using Domain.Models.Fbs.Models;
 using Domain.Models.Fbs.Requests;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace BL.Services;
 
@@ -43,28 +44,41 @@ public class WbService : IWbService
             var sizes = await GetSizeListAsync(assemblies);
             var sortedOrders = await GetSortedOrdersByChrtIdAsync(assemblies, sizes);
             var supplyCount = 0;
+            var successOrderToSuppliesCount = 0;
+
             foreach (var orders in sortedOrders)
             {
                 try
                 {
+                    if (successOrderToSuppliesCount + orders.Count >= 300)
+                    {
+                        _logger.LogInformation("Достигнут лимит кол-ва запросов ждем 1 минуту");
+                        await Task.Delay(TimeSpan.FromMinutes(1));
+                        successOrderToSuppliesCount = 0;
+                    }
+
                     var supplyName = GetSupplyName(cardList, (int)orders.First().ChrtId);
                     var supplyId = await _client.CreateNewSupply(supplyName);
-                    var successOrderToSuppliesCount = 0;
 
-                    foreach (var order in orders)
+                    var request = new AddOrdersToSupplyRequest()
                     {
-                        var isSuccess = await _client.AddOrderToSupplyAsync(supplyId, order.Id);
-                        if (!isSuccess)
-                        {
-                            _logger.LogWarning("{service}.{method} problem while adding order {orderId} to supply {supplyId}",
-                                nameof(WbService), nameof(IWbService.CreateDailySupplies), order.Id, supplyId);
-                        }
-                        successOrderToSuppliesCount++;
+                        Orders = orders.Select(x => x.Id).ToList()
+                    };
+
+                    var isSuccess = await _client.AddOrdersToSupplyAsync(supplyId, request);
+
+                    await Task.Delay(200);
+
+                    if (!isSuccess)
+                    {
+                        _logger.LogWarning("{service}.{method} problem while adding order {orderId} to supply {supplyId}",
+                            nameof(WbService), nameof(IWbService.CreateDailySupplies), JsonConvert.SerializeObject(request), supplyId);
                     }
+                    successOrderToSuppliesCount += request.Orders.Count;
 
                     supplyCount++;
                     _logger.LogInformation("Успешно сформировано {count} сборочных заданий в поставку {name}",
-                        successOrderToSuppliesCount, supplyId);
+                        request.Orders.Count, supplyId);
                 }
                 catch (Exception ex)
                 {
@@ -103,11 +117,24 @@ public class WbService : IWbService
         foreach (var size in sizes)
         {
             var sizeOrders = orders.Where(x => (int)x.ChrtId == size).ToList();
-            if (!sizeOrders.Any())
+            if (sizeOrders.Count == 0)
             {
                 _logger.LogWarning($"Для размера {size} не найдено сборочных заданий");
             }
-            sortedOrders.Add(sizeOrders);
+
+            var warehouseIds = sizeOrders.Select(x => x.WarehouseId).Distinct().ToList();
+
+            if (warehouseIds.Count > 1)
+            {
+                foreach (var id in warehouseIds)
+                {
+                    sortedOrders.Add(sizeOrders.Where(x => x.WarehouseId == id).ToList());
+                }
+            }
+            else
+            {
+                sortedOrders.Add(sizeOrders);
+            }
         }
         return sortedOrders;
     }
@@ -123,6 +150,6 @@ public class WbService : IWbService
 
         var size = card.Sizes.First(x => x.ChrtId == chrtId);
 
-        return $"{DateTime.Now.Date.ToShortDateString()} {card.Title} {size.TechSize} {size.WbSize}";
+        return $"{card.VendorCode} {size.TechSize}";
     }
 }
