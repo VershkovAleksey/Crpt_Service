@@ -11,23 +11,20 @@ namespace BL.Services;
 /// <summary>
 /// Сервис логики и манипуляций апи WB. Инкапсулирует в себе бизнес логику. Взаимодействует с клиентом и ботом
 /// </summary>
-public class WbService : IWbService
+public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
 {
-    private readonly ILogger<WbService> _logger;
-    private readonly WbClient _client;
-
-    public WbService(ILogger<WbService> logger, WbClient client)
-    {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _client = client ?? throw new ArgumentNullException(nameof(client));
-    }
+    private readonly ILogger<WbService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly WbClient _client = client ?? throw new ArgumentNullException(nameof(client));
 
     async Task<int> IWbService.CreateDailySupplies()
     {
         try
         {
+            //Создаем переменные для карточек товаров и запроса на получение карточек
             CardList cardList = new();
             GetCardsRequest getCardsRequest = new();
+
+            // Получаем первый пак карточек лимит 100, но бывает приходит по 10. Запрашиваем пока total не будет меньше лимита
             do
             {
                 var res = await _client.GetCardListAsync(getCardsRequest);
@@ -37,19 +34,26 @@ public class WbService : IWbService
 
                 getCardsRequest.Settings.Cursor.NmID = res.Cursor.NmID;
                 getCardsRequest.Settings.Cursor.UpdatedAt = res.Cursor.UpdatedAt;
-            }
-            while (cardList.Cursor.Total >= 100);
+                //Дальше получаем пока не выжрем лимит
+            } while (cardList.Cursor.Total >= 100);
 
+            // Получаем список новых сборочных заданий
             var assemblies = await _client.GetAllAssemblyTasks();
-            var sizes = await GetSizeListAsync(assemblies);
-            var sortedOrders = await GetSortedOrdersByChrtIdAsync(assemblies, sizes);
+
+            //Получаем размеры из сборочных заданий
+            var sizes = GetSizeList(assemblies);
+
+            //Сортируем сортированные сборочные заданий по размерам и сортировочным центрам
+            var sortedOrders = GetSortedOrdersByChrtIdAndSortingCenters(assemblies, sizes);
             var supplyCount = 0;
             var successOrderToSuppliesCount = 0;
 
+            //Формируем поставки исходя из сортированных сборочных заданий (заказов)
             foreach (var orders in sortedOrders)
             {
                 try
                 {
+                    //Проверяем не выжрали ли лимит по запросам (300 в минуту). Если выжрали, ждем 1 минуту и скидываем счетчик
                     if (successOrderToSuppliesCount + orders.Count >= 300)
                     {
                         _logger.LogInformation("Достигнут лимит кол-ва запросов ждем 1 минуту");
@@ -57,7 +61,10 @@ public class WbService : IWbService
                         successOrderToSuppliesCount = 0;
                     }
 
+                    //Получаем название поставки. Фомируется из артикула вб и размера
                     var supplyName = GetSupplyName(cardList, (int)orders.First().ChrtId);
+                    
+                    //Создаем новую поставку
                     var supplyId = await _client.CreateNewSupply(supplyName);
 
                     var request = new AddOrdersToSupplyRequest()
@@ -65,15 +72,20 @@ public class WbService : IWbService
                         Orders = orders.Select(x => x.Id).ToList()
                     };
 
+                    //Добавляем заказы в поставку
                     var isSuccess = await _client.AddOrdersToSupplyAsync(supplyId, request);
 
+                    //Между каждым запросом ждем 200мс (ограничение вб апи)
                     await Task.Delay(200);
 
                     if (!isSuccess)
                     {
-                        _logger.LogWarning("{service}.{method} problem while adding order {orderId} to supply {supplyId}",
-                            nameof(WbService), nameof(IWbService.CreateDailySupplies), JsonConvert.SerializeObject(request), supplyId);
+                        _logger.LogWarning(
+                            "{service}.{method} problem while adding order {orderId} to supply {supplyId}",
+                            nameof(WbService), nameof(IWbService.CreateDailySupplies),
+                            JsonConvert.SerializeObject(request), supplyId);
                     }
+
                     successOrderToSuppliesCount += request.Orders.Count;
 
                     supplyCount++;
@@ -88,6 +100,7 @@ public class WbService : IWbService
                     continue;
                 }
             }
+
             return supplyCount;
         }
         catch (Exception ex)
@@ -98,7 +111,7 @@ public class WbService : IWbService
         }
     }
 
-    private async Task<List<int>> GetSizeListAsync(List<Order> orders)
+    private List<int> GetSizeList(List<Order> orders)
     {
         List<int> sizes = new();
         foreach (var order in orders)
@@ -108,10 +121,11 @@ public class WbService : IWbService
                 sizes.Add((int)order.ChrtId);
             }
         }
+
         return sizes;
     }
 
-    private async Task<List<List<Order>>> GetSortedOrdersByChrtIdAsync(List<Order> orders, List<int> sizes)
+    private List<List<Order>> GetSortedOrdersByChrtIdAndSortingCenters(List<Order> orders, List<int> sizes)
     {
         List<List<Order>> sortedOrders = new();
         foreach (var size in sizes)
@@ -136,6 +150,7 @@ public class WbService : IWbService
                 sortedOrders.Add(sizeOrders);
             }
         }
+
         return sortedOrders;
     }
 
@@ -145,7 +160,6 @@ public class WbService : IWbService
         if (card is null)
         {
             throw new Exception("Can not find size in card or card is not exist");
-
         }
 
         var size = card.Sizes.First(x => x.ChrtId == chrtId);
