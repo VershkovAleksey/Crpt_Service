@@ -16,7 +16,7 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
     private readonly ILogger<WbService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly WbClient _client = client ?? throw new ArgumentNullException(nameof(client));
 
-    async Task<int> IWbService.CreateDailySupplies()
+    public async Task<int> CreateDailySupplies()
     {
         try
         {
@@ -65,7 +65,7 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
                     successOrderToSuppliesCount = 0;
                 }
 
-                //Получаем название поставки. Фомируется из артикула вб и размера
+                //Получаем название поставки. Формируется из артикула вб и размера
                 var supplyName = GetSupplyName(cardList, (int)orders.First().ChrtId);
 
                 //Создаем новую поставку
