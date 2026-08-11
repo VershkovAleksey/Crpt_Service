@@ -30,12 +30,12 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
         //3. Берем их айдишники
         var supplyIds = await GetSupplyIdsListAsync();
 
-        // Получаем список новых сборочных заданий
+        // Получаем список новых сборочных заданий - типа новые заказы
         var assemblies = await _client.GetNewAssemblyTasks();
 
-        //Получаем список сборочных заданий
+        //Получаем список сборочных заданий - все заказы, которые уже в поставке, доставке, новые и т.д.
         var ordersList = await GetOrdersListAsync();
-        
+
         await ProcessExistSuppliesAsync(supplyIds, ordersList, assemblies);
     }
 
@@ -69,7 +69,7 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
             throw;
         }
     }
-    
+
 
     private async Task<List<Order>> GetOrdersListAsync()
     {
@@ -81,9 +81,6 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
         {
             var currentResponse = await _client.GetOrdersAsync(request);
 
-            //Нужно ждать между запросами 200мс
-            await Task.Delay(200);
-
             ordersCount = currentResponse.Orders.Count;
             ordersList.Orders.AddRange(currentResponse.Orders);
             request.Next = currentResponse.Next;
@@ -91,49 +88,40 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
 
         return ordersList.Orders;
     }
-    
+
     private async Task ProcessExistSuppliesAsync(List<string> supplyIds, List<Order> ordersList, List<Order> assemblies)
     {
-        var successOrderToSuppliesCount = 0;
         foreach (var supplyId in supplyIds)
         {
-            
-            //Получаем идентификаторы сборочных заданий в поставке
+            //Получаем идентификаторы сборочных заданий(заказов) в поставке
             var orderInSupply = await _client.GetOrderIdsFromSupplyAsync(supplyId);
 
             if (orderInSupply.OrderIds == null || orderInSupply.OrderIds.Count == 0)
             {
+                _logger.LogInformation(
+                    "{service}.{method} Не найдено заказов в поставке {supplyId}",
+                    nameof(WbService), nameof(IWbService.CreateDailySupplies), supplyId);
                 continue;
             }
 
-            //Берем из списка сборочных заданий то задание, которое в поставке
-            var order = ordersList.FirstOrDefault(x => x.Id == orderInSupply.OrderIds.First());
+            //Берем из списка сборочных заданий(заказов) любое задание из поставки
+            var order = ordersList.FirstOrDefault(x => orderInSupply.OrderIds.Any(orderId => x.Id == orderId));
             if (order is null)
             {
                 continue;
             }
-            
+
             //Выбираем из новых заказов те, что подходят к поставке по товару и СЦ
-            var assempliesToSupply = assemblies.Where(x => x.ChrtId == order.ChrtId && x.WarehouseId == order.WarehouseId).ToList();
-            
-            //Проверяем не выжрали ли лимит по запросам (300 в минуту). Если выжрали, ждем 1 минуту и скидываем счетчик
-            if (successOrderToSuppliesCount + assempliesToSupply.Count >= 300)
-            {
-                _logger.LogInformation("Достигнут лимит кол-ва запросов ждем 1 минуту");
-                await Task.Delay(TimeSpan.FromMinutes(1));
-                successOrderToSuppliesCount = 0;
-            }
-            
+            // chrtId - размер\цвет, WarehouseId - идентификатор сортировчного центра
+            var assembliesToSupply = assemblies.Where(x => x.ChrtId == order.ChrtId && x.WarehouseId == order.WarehouseId).ToList();
+
             var request = new AddOrdersToSupplyRequest()
             {
-                Orders = assempliesToSupply.Select(x => x.Id).ToList()
+                Orders = assembliesToSupply.Select(x => x.Id).ToList()
             };
 
             //Добавляем заказы в поставку
             var isSuccess = await _client.AddOrdersToSupplyAsync(supplyId, request);
-
-            //Между каждым запросом ждем 200мс (ограничение вб апи)
-            await Task.Delay(200);
 
             if (!isSuccess)
             {
@@ -143,12 +131,8 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
                     JsonConvert.SerializeObject(request), supplyId);
             }
 
-            successOrderToSuppliesCount += request.Orders.Count;
-
-            _logger.LogInformation("Успешно сформировано {count} сборочных заданий в поставку {name}",
+            _logger.LogInformation("Успешно добавлено {count} сборочных заданий в поставку {name}",
                 request.Orders.Count, supplyId);
-            //Между каждым запросом ждем 200мс (ограничение вб апи)
-            await Task.Delay(200);
         }
     }
 
@@ -160,9 +144,6 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
         do
         {
             var currentResponse = await _client.GetSuppliesListAsync(request);
-
-            //Нужно ждать между запросами 200мс
-            await Task.Delay(200);
 
             suppliesCount = currentResponse.Supplies.Count;
             suppliesList.Supplies.AddRange(currentResponse.Supplies);
@@ -176,21 +157,12 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
     private async Task<int> ProcessOrdersAsync(List<List<Order>> sortedOrders, CardList cardList)
     {
         var supplyCount = 0;
-        var successOrderToSuppliesCount = 0;
 
         //Формируем поставки исходя из сортированных сборочных заданий (заказов)
         foreach (var orders in sortedOrders)
         {
             try
             {
-                //Проверяем не выжрали ли лимит по запросам (300 в минуту). Если выжрали, ждем 1 минуту и скидываем счетчик
-                if (successOrderToSuppliesCount + orders.Count >= 300)
-                {
-                    _logger.LogInformation("Достигнут лимит кол-ва запросов ждем 1 минуту");
-                    await Task.Delay(TimeSpan.FromMinutes(1));
-                    successOrderToSuppliesCount = 0;
-                }
-
                 //Получаем название поставки. Формируется из артикула вб и размера
                 var supplyName = GetSupplyName(cardList, (int)orders.First().ChrtId);
 
@@ -205,9 +177,6 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
                 //Добавляем заказы в поставку
                 var isSuccess = await _client.AddOrdersToSupplyAsync(supplyId, request);
 
-                //Между каждым запросом ждем 200мс (ограничение вб апи)
-                await Task.Delay(200);
-
                 if (!isSuccess)
                 {
                     _logger.LogWarning(
@@ -215,8 +184,6 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
                         nameof(WbService), nameof(IWbService.CreateDailySupplies),
                         JsonConvert.SerializeObject(request), supplyId);
                 }
-
-                successOrderToSuppliesCount += request.Orders.Count;
 
                 supplyCount++;
                 _logger.LogInformation("Успешно сформировано {count} сборочных заданий в поставку {name}",
