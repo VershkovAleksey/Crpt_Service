@@ -6,6 +6,7 @@ using Flurl.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Net;
+using Domain.Models.Fbs.Responses;
 using WbManageBot.Models;
 
 namespace BL.Infrastructure.Http;
@@ -24,6 +25,69 @@ public class WbClient(ILogger<WbClient> logger)
     private const string ContentApiUrl = "https://content-api.wildberries.ru";
     private const string MarketplaceApiUrl = "https://marketplace-api.wildberries.ru";
 
+    public async Task<GetOrderIdsFromSupplyResponse> GetOrderIdsFromSupplyAsync(string supplyId)
+    {
+        try
+        {
+            var response = await new Url(MarketplaceApiUrl)
+                .AppendPathSegment($"/api/marketplace/v3/supplies/{supplyId}/order-ids")
+                .WithOAuthBearerToken(Token).GetJsonAsync<GetOrderIdsFromSupplyResponse>();
+
+            return response ?? throw new Exception("Ошибка получения списка сборочных заданий в поставке");
+        }
+        catch (FlurlHttpException ex)
+        {
+            logger.LogError(ex, "{service}.{method} : {message}",
+                nameof(WbClient), nameof(GetNewAssemblyTasks), ex.Message);
+            throw;
+        }
+    }
+    
+    public async Task<GetOrdersListResponse> GetOrdersAsync(GetWithLimitRequest getWithLimitRequest)
+    {
+        try
+        {
+            var response = await new Url(MarketplaceApiUrl)
+                .AppendPathSegment($"/api/v3/orders")
+                .WithOAuthBearerToken(Token)
+                .SetQueryParams(getWithLimitRequest)
+                .GetJsonAsync<GetOrdersListResponse>();
+
+            return response ?? throw new Exception("Ошибка получения списка сборочных заданий");
+        }
+        catch (FlurlHttpException ex)
+        {
+            logger.LogError(ex, "{service}.{method} : {message}",
+                nameof(WbClient), nameof(GetNewAssemblyTasks), ex.Message);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Метод возвращает список поставок.
+    /// </summary>
+    /// <param name="getWithLimitRequest">Запрос на получение списка поставок</param>
+    /// <returns>Список поставок</returns>
+    public async Task<GetSuppliesListResponse> GetSuppliesListAsync(GetWithLimitRequest getWithLimitRequest)
+    {
+        try
+        {
+            var response = await new Url(MarketplaceApiUrl)
+                .AppendPathSegment("/api/v3/supplies")
+                .SetQueryParams(getWithLimitRequest)
+                .WithOAuthBearerToken(Token)
+                .GetJsonAsync<GetSuppliesListResponse>();
+
+            return response ?? throw new Exception("Ошибка получения списка поставок");
+        }
+        catch (FlurlHttpException ex)
+        {
+            logger.LogError(ex, "{service}.{method} : {message}",
+                nameof(WbClient), nameof(GetNewAssemblyTasks), ex.Message);
+            throw;
+        }
+    }
+
     public async Task<CardList> GetCardListAsync(GetCardsRequest request)
     {
         try
@@ -39,12 +103,12 @@ public class WbClient(ILogger<WbClient> logger)
         catch (FlurlHttpException ex)
         {
             logger.LogError(ex, "{service}.{method} : {message}",
-                nameof(WbClient), nameof(GetAllAssemblyTasks), ex.Message);
+                nameof(WbClient), nameof(GetNewAssemblyTasks), ex.Message);
             throw;
         }
     }
 
-    public async Task<List<Order>> GetAllAssemblyTasks()
+    public async Task<List<Order>> GetNewAssemblyTasks()
     {
         try
         {
@@ -57,7 +121,7 @@ public class WbClient(ILogger<WbClient> logger)
         catch (FlurlHttpException ex)
         {
             logger.LogError(ex, "{service}.{method} : {message}",
-                nameof(WbClient), nameof(GetAllAssemblyTasks), ex.Message);
+                nameof(WbClient), nameof(GetNewAssemblyTasks), ex.Message);
             throw;
         }
     }
@@ -71,7 +135,7 @@ public class WbClient(ILogger<WbClient> logger)
                 .WithOAuthBearerToken(Token)
                 .PostJsonAsync(supply)
                 .ReceiveJson<CreateSupplyResponse>();
-            
+
             return response.Id;
         }
         catch (FlurlHttpException ex)

@@ -3,6 +3,7 @@ using BL.Infrastructure.Http;
 using Domain.Models.Fbs;
 using Domain.Models.Fbs.Models;
 using Domain.Models.Fbs.Requests;
+using Domain.Models.Fbs.Responses;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
@@ -16,6 +17,28 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
     private readonly ILogger<WbService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly WbClient _client = client ?? throw new ArgumentNullException(nameof(client));
 
+    /*
+     * Надо такой алгоритм: при добавлении из новых на сборку надо чтобы он смотрел уже собранные папки
+     * с товарами и докладывал в уже имеющиеся папки в соответствии с цветом и размером и если нет совпадения
+     * то ничего бы не делал и потихоньку мы приедем к автоматизации
+     */
+
+    public async Task FillCreatedSupplies()
+    {
+        //1. GET /api/v3/supplies - получаем список поставок существующих
+        //2. Получаем все, берем те, у которых Done = false - открытые поставки на сборке
+        //3. Берем их айдишники
+        var supplyIds = await GetSupplyIdsListAsync();
+
+        // Получаем список новых сборочных заданий
+        var assemblies = await _client.GetNewAssemblyTasks();
+
+        //Получаем список сборочных заданий
+        var ordersList = await GetOrdersListAsync();
+        
+        await ProcessExistSuppliesAsync(supplyIds, ordersList, assemblies);
+    }
+
     public async Task<int> CreateDailySupplies()
     {
         try
@@ -27,7 +50,7 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
             await GetCardListAsync(getCardsRequest, cardList);
 
             // Получаем список новых сборочных заданий
-            var assemblies = await _client.GetAllAssemblyTasks();
+            var assemblies = await _client.GetNewAssemblyTasks();
 
             //Получаем размеры из сборочных заданий
             var sizes = GetSizeList(assemblies);
@@ -46,6 +69,109 @@ public class WbService(ILogger<WbService> logger, WbClient client) : IWbService
             throw;
         }
     }
+    
+
+    private async Task<List<Order>> GetOrdersListAsync()
+    {
+        var ordersList = new GetOrdersListResponse();
+        var request = new GetWithLimitRequest();
+        int ordersCount;
+
+        do
+        {
+            var currentResponse = await _client.GetOrdersAsync(request);
+
+            //Нужно ждать между запросами 200мс
+            await Task.Delay(200);
+
+            ordersCount = currentResponse.Orders.Count;
+            ordersList.Orders.AddRange(currentResponse.Orders);
+            request.Next = currentResponse.Next;
+        } while (ordersCount == request.Limit);
+
+        return ordersList.Orders;
+    }
+    
+    private async Task ProcessExistSuppliesAsync(List<string> supplyIds, List<Order> ordersList, List<Order> assemblies)
+    {
+        var successOrderToSuppliesCount = 0;
+        foreach (var supplyId in supplyIds)
+        {
+            
+            //Получаем идентификаторы сборочных заданий в поставке
+            var orderInSupply = await _client.GetOrderIdsFromSupplyAsync(supplyId);
+
+            if (orderInSupply.OrderIds == null || orderInSupply.OrderIds.Count == 0)
+            {
+                continue;
+            }
+
+            //Берем из списка сборочных заданий то задание, которое в поставке
+            var order = ordersList.FirstOrDefault(x => x.Id == orderInSupply.OrderIds.First());
+            if (order is null)
+            {
+                continue;
+            }
+            
+            //Выбираем из новых заказов те, что подходят к поставке по товару и СЦ
+            var assempliesToSupply = assemblies.Where(x => x.ChrtId == order.ChrtId && x.WarehouseId == order.WarehouseId).ToList();
+            
+            //Проверяем не выжрали ли лимит по запросам (300 в минуту). Если выжрали, ждем 1 минуту и скидываем счетчик
+            if (successOrderToSuppliesCount + assempliesToSupply.Count >= 300)
+            {
+                _logger.LogInformation("Достигнут лимит кол-ва запросов ждем 1 минуту");
+                await Task.Delay(TimeSpan.FromMinutes(1));
+                successOrderToSuppliesCount = 0;
+            }
+            
+            var request = new AddOrdersToSupplyRequest()
+            {
+                Orders = assempliesToSupply.Select(x => x.Id).ToList()
+            };
+
+            //Добавляем заказы в поставку
+            var isSuccess = await _client.AddOrdersToSupplyAsync(supplyId, request);
+
+            //Между каждым запросом ждем 200мс (ограничение вб апи)
+            await Task.Delay(200);
+
+            if (!isSuccess)
+            {
+                _logger.LogWarning(
+                    "{service}.{method} problem while adding order {orderId} to supply {supplyId}",
+                    nameof(WbService), nameof(IWbService.CreateDailySupplies),
+                    JsonConvert.SerializeObject(request), supplyId);
+            }
+
+            successOrderToSuppliesCount += request.Orders.Count;
+
+            _logger.LogInformation("Успешно сформировано {count} сборочных заданий в поставку {name}",
+                request.Orders.Count, supplyId);
+            //Между каждым запросом ждем 200мс (ограничение вб апи)
+            await Task.Delay(200);
+        }
+    }
+
+    private async Task<List<string>> GetSupplyIdsListAsync()
+    {
+        var suppliesList = new GetSuppliesListResponse();
+        var request = new GetWithLimitRequest();
+        int suppliesCount;
+        do
+        {
+            var currentResponse = await _client.GetSuppliesListAsync(request);
+
+            //Нужно ждать между запросами 200мс
+            await Task.Delay(200);
+
+            suppliesCount = currentResponse.Supplies.Count;
+            suppliesList.Supplies.AddRange(currentResponse.Supplies);
+            request.Next = currentResponse.Next;
+        } while (suppliesCount == request.Limit);
+
+        return suppliesList.Supplies.Where(x => !x.Done).Select(x => x.Id).ToList();
+    }
+
 
     private async Task<int> ProcessOrdersAsync(List<List<Order>> sortedOrders, CardList cardList)
     {

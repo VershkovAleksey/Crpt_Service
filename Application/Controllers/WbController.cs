@@ -30,4 +30,20 @@ public class WbController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
+    
+    [HttpGet]
+    [Route("fill-exist-supplies")]
+    public IActionResult FillExistSupplies()
+    {
+        try
+        {
+            //Специально не дожидаемся т.к. процесс не быстрый.
+             _wbService.FillCreatedSupplies();
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
 }
